@@ -6,14 +6,6 @@ Run with:
 or, for production-style serving:
     gunicorn "app:create_app()"
 
-See README.md for full setup and API reference."""
-app.py — K-Ray Enterprise backend entry point.
-
-Run with:
-    python app.py
-or, for production-style serving:
-    gunicorn "app:create_app()"
-
 See README.md for full setup and API reference.
 """
 import os
