@@ -9,7 +9,7 @@ or, for production-style serving:
 See README.md for full setup and API reference.
 """
 import os
-from flask import Flask, jsonify, send_from_directory
+from flask import Flask, jsonify
 
 from db import init_db
 from routes_auth import bp as auth_bp
@@ -17,7 +17,7 @@ from routes_resources import bp as resources_bp
 
 
 def create_app():
-    app = Flask(__name__, static_folder="static", static_url_path="")
+    app = Flask(__name__)
     init_db()
 
     app.register_blueprint(auth_bp)
@@ -39,12 +39,16 @@ def create_app():
 
     # --- Health check + friendly root ------------------------------------
     @app.get("/api/health")
-    def jsonify():
+    def health():
         return jsonify({"status": "ok", "service": "kray-enterprise-backend"})
 
     @app.get("/")
     def index():
-        return app.send_static_file("index.html")
+        return jsonify({
+            "service": "K-Ray Enterprise backend",
+            "docs": "See README.md for the API reference",
+            "health": "/api/health",
+        })
 
     # --- Error handlers ----------------------------------------------------
     @app.errorhandler(404)
