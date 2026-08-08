@@ -27,51 +27,66 @@ def _num(data, key, default=0):
         return default
 
 
+def _row_out(row, reverse_map):
+    """Apply column->API field renames (e.g. item_desc -> desc) to an outgoing row."""
+    if row is None:
+        return None
+    d = dict(row)
+    for col, api_field in reverse_map.items():
+        if col in d:
+            d[api_field] = d.pop(col)
+    return d
+
+
 # ---------------------------------------------------------------------
 # Generic helpers for the "simple" resources: same shape of
 # list / create / delete, differing only in table name + fields.
 # ---------------------------------------------------------------------
-def register_simple_resource(url, table, fields, numeric_fields=()):
+def register_simple_resource(url, table, fields, numeric_fields=(), column_map=None):
     """
     Registers GET/POST/DELETE for a straightforward table that has a
     user_id column and an auto-increment id primary key.
 
-    fields: ordered list of column names accepted from the JSON body
+    fields: ordered list of API field names accepted from the JSON body
     numeric_fields: subset of `fields` that should be coerced to float
+    column_map: optional {api_field: actual_column_name} for fields whose
+                DB column name differs from the API's JSON field name
+                (used to dodge reserved-word column names like "desc")
     """
+    column_map = column_map or {}
+    reverse_map = {v: k for k, v in column_map.items()}
+    db_columns = [column_map.get(f, f) for f in fields]
 
     def list_records():
         with db_cursor() as cur:
             if g.role == "admin":
                 cur.execute(f"SELECT * FROM {table} ORDER BY id DESC")
             else:
-                cur.execute(f"SELECT * FROM {table} WHERE user_id = ? ORDER BY id DESC", (g.user_id,))
+                cur.execute(f"SELECT * FROM {table} WHERE user_id = %s ORDER BY id DESC", (g.user_id,))
             rows = cur.fetchall()
-        return jsonify(rows_to_list(rows))
+        return jsonify([_row_out(r, reverse_map) for r in rows])
 
     def create_record():
         data = request.get_json(silent=True) or {}
         values = []
         for f in fields:
             values.append(_num(data, f) if f in numeric_fields else data.get(f))
-        columns = ", ".join(["user_id"] + fields)
-        placeholders = ", ".join(["?"] * (len(fields) + 1))
+        columns = ", ".join(["user_id"] + db_columns)
+        placeholders = ", ".join(["%s"] * (len(db_columns) + 1))
         with db_cursor(commit=True) as cur:
             cur.execute(
-                f"INSERT INTO {table} ({columns}) VALUES ({placeholders})",
+                f"INSERT INTO {table} ({columns}) VALUES ({placeholders}) RETURNING *",
                 [g.user_id] + values,
             )
-            new_id = cur.lastrowid
-            cur.execute(f"SELECT * FROM {table} WHERE id = ?", (new_id,))
             row = cur.fetchone()
-        return jsonify(row_to_dict(row)), 201
+        return jsonify(_row_out(row, reverse_map)), 201
 
     def delete_record(record_id):
         with db_cursor(commit=True) as cur:
-            cur.execute(f"SELECT id FROM {table} WHERE id = ?", (record_id,))
+            cur.execute(f"SELECT id FROM {table} WHERE id = %s", (record_id,))
             if not cur.fetchone():
                 return jsonify({"error": "Record not found"}), 404
-            cur.execute(f"DELETE FROM {table} WHERE id = ?", (record_id,))
+            cur.execute(f"DELETE FROM {table} WHERE id = %s", (record_id,))
         return jsonify({"deleted": record_id})
 
     list_records.__name__ = f"list_{table}"
@@ -117,6 +132,7 @@ register_simple_resource(
     "pumice", "pumice",
     fields=["date", "type", "desc", "qty", "amount"],
     numeric_fields=("qty", "amount"),
+    column_map={"desc": "item_desc"},
 )
 
 register_simple_resource(
@@ -142,7 +158,7 @@ def list_products():
         if g.role == "admin":
             cur.execute("SELECT * FROM products ORDER BY id DESC")
         else:
-            cur.execute("SELECT * FROM products WHERE user_id = ? ORDER BY id DESC", (g.user_id,))
+            cur.execute("SELECT * FROM products WHERE user_id = %s ORDER BY id DESC", (g.user_id,))
         rows = cur.fetchall()
     return jsonify(rows_to_list(rows))
 
@@ -160,11 +176,9 @@ def create_product():
 
     with db_cursor(commit=True) as cur:
         cur.execute(
-            "INSERT INTO products (user_id, name, category, cost, price) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO products (user_id, name, category, cost, price) VALUES (%s, %s, %s, %s, %s) RETURNING *",
             (g.user_id, name, category, cost, price),
         )
-        new_id = cur.lastrowid
-        cur.execute("SELECT * FROM products WHERE id = ?", (new_id,))
         row = cur.fetchone()
     return jsonify(row_to_dict(row)), 201
 
@@ -178,13 +192,14 @@ def update_product_price(product_id):
         return jsonify({"error": "field must be 'cost' or 'price'"}), 400
     value = _num(data, "value")
 
+    # field name is validated against a fixed allow-list above, so it's
+    # safe to interpolate directly into the column position here.
     with db_cursor(commit=True) as cur:
-        cur.execute("SELECT * FROM products WHERE id = ? AND user_id = ?", (product_id, g.user_id))
+        cur.execute("SELECT * FROM products WHERE id = %s AND user_id = %s", (product_id, g.user_id))
         row = cur.fetchone()
         if not row:
             return jsonify({"error": "Product not found"}), 404
-        cur.execute(f"UPDATE products SET {field} = ? WHERE id = ?", (value, product_id))
-        cur.execute("SELECT * FROM products WHERE id = ?", (product_id,))
+        cur.execute(f"UPDATE products SET {field} = %s WHERE id = %s RETURNING *", (value, product_id))
         row = cur.fetchone()
     return jsonify(row_to_dict(row))
 
@@ -193,10 +208,10 @@ def update_product_price(product_id):
 @admin_required
 def delete_product(product_id):
     with db_cursor(commit=True) as cur:
-        cur.execute("SELECT id FROM products WHERE id = ?", (product_id,))
+        cur.execute("SELECT id FROM products WHERE id = %s", (product_id,))
         if not cur.fetchone():
             return jsonify({"error": "Product not found"}), 404
-        cur.execute("DELETE FROM products WHERE id = ?", (product_id,))
+        cur.execute("DELETE FROM products WHERE id = %s", (product_id,))
     return jsonify({"deleted": product_id})
 
 
@@ -212,12 +227,12 @@ def list_credit_sales():
         if g.role == "admin":
             cur.execute("SELECT * FROM credit_sales ORDER BY id DESC")
         else:
-            cur.execute("SELECT * FROM credit_sales WHERE user_id = ? ORDER BY id DESC", (g.user_id,))
+            cur.execute("SELECT * FROM credit_sales WHERE user_id = %s ORDER BY id DESC", (g.user_id,))
         sales = rows_to_list(cur.fetchall())
 
         for sale in sales:
             cur.execute(
-                "SELECT * FROM credit_payments WHERE credit_sale_id = ? ORDER BY id",
+                "SELECT * FROM credit_payments WHERE credit_sale_id = %s ORDER BY id",
                 (sale["id"],),
             )
             sale["payments"] = rows_to_list(cur.fetchall())
@@ -243,11 +258,9 @@ def create_credit_sale():
         cur.execute(
             """INSERT INTO credit_sales
                (user_id, receipt_id, date, customer, item, qty, price, total, paid, remaining)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)""",
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 0, %s) RETURNING *""",
             (g.user_id, receipt_id, data.get("date"), customer, item, qty, price, total, total),
         )
-        new_id = cur.lastrowid
-        cur.execute("SELECT * FROM credit_sales WHERE id = ?", (new_id,))
         row = row_to_dict(cur.fetchone())
     row["payments"] = []
     return jsonify(row), 201
@@ -266,7 +279,7 @@ def add_credit_payment(credit_sale_id):
 
     with db_cursor(commit=True) as cur:
         cur.execute(
-            "SELECT * FROM credit_sales WHERE id = ? AND user_id = ?",
+            "SELECT * FROM credit_sales WHERE id = %s AND user_id = %s",
             (credit_sale_id, g.user_id),
         )
         sale = cur.fetchone()
@@ -277,17 +290,16 @@ def add_credit_payment(credit_sale_id):
         new_remaining = max(0.0, sale["total"] - new_paid)
 
         cur.execute(
-            "INSERT INTO credit_payments (credit_sale_id, date, amount, account) VALUES (?, ?, ?, ?)",
+            "INSERT INTO credit_payments (credit_sale_id, date, amount, account) VALUES (%s, %s, %s, %s)",
             (credit_sale_id, date, amount, account),
         )
         cur.execute(
-            "UPDATE credit_sales SET paid = ?, remaining = ? WHERE id = ?",
+            "UPDATE credit_sales SET paid = %s, remaining = %s WHERE id = %s RETURNING *",
             (new_paid, new_remaining, credit_sale_id),
         )
-        cur.execute("SELECT * FROM credit_sales WHERE id = ?", (credit_sale_id,))
         updated = row_to_dict(cur.fetchone())
         cur.execute(
-            "SELECT * FROM credit_payments WHERE credit_sale_id = ? ORDER BY id",
+            "SELECT * FROM credit_payments WHERE credit_sale_id = %s ORDER BY id",
             (credit_sale_id,),
         )
         updated["payments"] = rows_to_list(cur.fetchall())
@@ -299,8 +311,8 @@ def add_credit_payment(credit_sale_id):
 @admin_required
 def delete_credit_sale(credit_sale_id):
     with db_cursor(commit=True) as cur:
-        cur.execute("SELECT id FROM credit_sales WHERE id = ?", (credit_sale_id,))
+        cur.execute("SELECT id FROM credit_sales WHERE id = %s", (credit_sale_id,))
         if not cur.fetchone():
             return jsonify({"error": "Credit sale not found"}), 404
-        cur.execute("DELETE FROM credit_sales WHERE id = ?", (credit_sale_id,))
+        cur.execute("DELETE FROM credit_sales WHERE id = %s", (credit_sale_id,))
     return jsonify({"deleted": credit_sale_id})

@@ -1,7 +1,7 @@
 # K-Ray Enterprise — Python Backend
 
-A Flask + SQLite REST API that mirrors the K-Ray Enterprise HTML app's data
-model, and enforces the **User vs Admin** permission split server-side
+A Flask + PostgreSQL REST API that mirrors the K-Ray Enterprise HTML app's
+data model, and enforces the **User vs Admin** permission split server-side
 (the HTML prototype only enforced it in the browser, which anyone could
 bypass with dev tools — this backend makes it real).
 
@@ -11,28 +11,48 @@ bypass with dev tools — this backend makes it real).
   **delete anything** — but cannot create or edit anything. Reaching admin
   requires a normal password login *plus* a one-time 6-digit email code.
 
-No database server or ORM required — it uses Python's built-in `sqlite3`
-module, so setup is just Flask + PyJWT.
+Uses PostgreSQL for real persistence — data survives restarts and
+redeploys (unlike SQLite on most free hosts, where the disk resets).
 
-## 1. Setup
+## 1. Deploying on Render (recommended path)
+
+1. **Create a Postgres database**: Render dashboard → **New +** → **PostgreSQL**.
+   Pick the free tier. Wait for it to finish provisioning.
+2. **Create this web service**: **New +** → **Web Service**, connect your repo.
+   - Build Command: `pip install -r requirements.txt`
+   - Start Command: `gunicorn "app:create_app()"`
+3. **Connect the database to this service**: in the web service's
+   **Environment** tab, add an environment variable `DATABASE_URL` and set
+   its value to your Postgres database's **Internal Database URL** (copy it
+   from the Postgres database's page on Render — under "Connections").
+   Render's docs also let you link them automatically when creating the
+   web service, which sets `DATABASE_URL` for you.
+4. Deploy. On startup, `init_db()` creates all tables automatically if
+   they don't exist yet — no manual migration step needed.
+
+Because the database is now a separate managed service instead of a file
+on the app's own disk, your data will **survive service restarts, idle
+spin-downs, and redeploys** — the three things that were wiping your data
+before.
+
+## 2. Local setup
 
 ```bash
 cd backend
 python3 -m venv venv
 source venv/bin/activate        # Windows: venv\Scripts\activate
 pip install -r requirements.txt
-cp .env.example .env            # then edit values as needed
+cp .env.example .env            # then set KRAY_DATABASE_URL to a local/remote Postgres URL
 ```
 
-## 2. Run it
+## 3. Run it
 
 ```bash
 python app.py
 ```
 
-The API starts on `http://localhost:5000`. A SQLite file `kray.db` is
-created automatically on first run (change its location with
-`KRAY_DB_PATH`).
+The API starts on `http://localhost:5000`. Tables are created automatically
+on first run against whatever `DATABASE_URL` / `KRAY_DATABASE_URL` points to.
 
 For production, run behind gunicorn instead of the Flask dev server:
 
@@ -48,17 +68,19 @@ returned directly in the `/api/auth/login` response body as `demo_code`,
 so you can test the whole admin flow without any email setup. Set the SMTP
 variables in `.env` to send real emails instead (see `.env.example`).
 
-## 3. Run the test suite
+## 4. Run the test suite
 
 A self-contained functional test (no server process needed — it drives
 the app through Flask's test client) exercises signup, login, admin
-verification, and the full read/write/delete permission matrix:
+verification, and the full read/write/delete permission matrix. It needs
+a real (disposable/test) Postgres database to run against:
 
 ```bash
+export KRAY_DATABASE_URL=postgresql://user:pass@localhost:5432/kray_test
 python test_flow.py
 ```
 
-## 4. API Reference
+## 5. API Reference
 
 All request/response bodies are JSON. Authenticated endpoints expect:
 
@@ -127,27 +149,27 @@ ADMIN_TOKEN=$(curl -s -X POST localhost:5000/api/auth/verify-admin \
 curl -X DELETE localhost:5000/api/products/1 -H "Authorization: Bearer $ADMIN_TOKEN"
 ```
 
-## 5. Connecting the existing HTML frontend
+## 6. Connecting the HTML frontend
 
-The `abila.html` prototype currently stores everything in `localStorage`
-and checks the admin role only in JavaScript. To wire it up to this
-backend, the frontend's state functions (`saveStateToStorage`,
-`loadStateFromStorage`, `handleLogin`, `handleAdminVerify`, the various
-`add*`/`delete*` functions) would need to call these endpoints with
-`fetch()` instead of reading/writing `localStorage` directly. Happy to do
-that wiring as a follow-up if you'd like the two connected end-to-end.
+The `abila.html` frontend already has the sync layer built in. On the
+login screen, click **⚙ Configure** and enter this backend's URL (e.g.
+your Render web service URL). Once connected, sign-up/login/admin
+verification and every data module (Sales, Purchases, Credit Sales,
+Expenses, Cash, Transfers, Pumice, Products, Stock Logs, Comments) read
+from and write to this API instead of the browser's local storage, so
+the same account shows the same data from any device.
 
-## 6. Project layout
+## 7. Project layout
 
 ```
 backend/
 ├── app.py               # Flask app factory, CORS, error handlers
-├── db.py                 # SQLite schema + connection helpers
+├── db.py                 # Postgres schema + connection helpers
 ├── auth.py               # Password hashing, JWT, role decorators
 ├── mailer.py              # Admin code email sender (+ demo-mode fallback)
 ├── routes_auth.py         # /api/auth/* endpoints
 ├── routes_resources.py    # /api/products, /api/sales, etc.
-├── test_flow.py           # End-to-end functional test
+├── test_flow.py           # End-to-end functional test (needs a Postgres DB)
 ├── requirements.txt
 ├── .env.example
 └── README.md

@@ -1,15 +1,19 @@
 """
 Quick end-to-end smoke test using Flask's test client (no server needed).
+
+Requires a real Postgres database — set DATABASE_URL (or KRAY_DATABASE_URL)
+to a scratch/test database before running this, e.g.:
+
+    export KRAY_DATABASE_URL=postgresql://user:pass@localhost:5432/kray_test
+    python test_flow.py
+
+This will create and use real tables in that database (via init_db()),
+so always point it at a disposable test database, never production.
+
 Run with: python test_flow.py
 """
 import os
 import sys
-import json
-
-# Use an isolated test DB so this doesn't touch a real kray.db
-os.environ["KRAY_DB_PATH"] = os.path.join(os.path.dirname(__file__), "test_kray.db")
-if os.path.exists(os.environ["KRAY_DB_PATH"]):
-    os.remove(os.environ["KRAY_DB_PATH"])
 
 sys.path.insert(0, os.path.dirname(__file__))
 from app import app  # noqa: E402
@@ -138,5 +142,24 @@ expect(all(s.get("item") != "Salt 1kg" for s in body), "user only sees their OWN
 
 code, body = call("get", "/api/sales", token=admin_token)
 expect(any(s.get("item") == "Salt 1kg" for s in body), "admin sees ALL businesses' sales")
+
+# 16. Corrected schemas: purchases (cost+category), expenses (name), cash (source), pumice (desc, 3 types)
+code, body = call("post", "/api/purchases", token=user_token, json={
+    "date": "2026-08-07", "item": "Maize Flour", "category": "Grains",
+    "supplier": "ABC Millers", "account": "mpesa", "qty": 10, "cost": 120
+})
+expect(code == 201 and body["cost"] == 120 and body["category"] == "Grains", f"purchases use cost+category (got {code}: {body})")
+
+code, body = call("post", "/api/expenses", token=user_token, json={"date": "2026-08-07", "name": "Rent", "category": "Overheads", "amount": 5000, "account": "cash"})
+expect(code == 201 and body["name"] == "Rent", "expenses use 'name' field")
+
+code, body = call("post", "/api/cash", token=user_token, json={"date": "2026-08-07", "source": "Owner Injection", "account": "cash", "amount": 10000})
+expect(code == 201 and body["source"] == "Owner Injection", "cash has 'source' field")
+
+code, body = call("post", "/api/pumice", token=user_token, json={"date": "2026-08-07", "type": "purchase", "desc": "Pumice stone batch", "qty": 5, "amount": 2000})
+expect(code == 201 and body["type"] == "purchase", "pumice accepts 'purchase' type (3-way enum)")
+
+code, body = call("post", "/api/stock-logs", token=user_token, json={"date": "2026-08-07", "type": "add", "item": "Rice 25kg", "qty": 20, "cost": 2000, "comment": "Restock"})
+expect(code == 201 and body["item"] == "Rice 25kg", "stock-logs use item name directly")
 
 print("\nAll checks passed.")

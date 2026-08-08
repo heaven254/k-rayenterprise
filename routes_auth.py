@@ -37,19 +37,17 @@ def signup():
         return jsonify({"error": "name, email and password are required"}), 400
 
     with db_cursor(commit=True) as cur:
-        cur.execute("SELECT id FROM users WHERE email = ?", (email,))
+        cur.execute("SELECT id FROM users WHERE email = %s", (email,))
         if cur.fetchone():
             return jsonify({"error": "An account with this email already exists"}), 409
 
         cur.execute(
-            "INSERT INTO users (name, business, email, password_hash) VALUES (?, ?, ?, ?)",
+            "INSERT INTO users (name, business, email, password_hash) VALUES (%s, %s, %s, %s) RETURNING *",
             (name, business, email, hash_password(password)),
         )
-        user_id = cur.lastrowid
-        cur.execute("SELECT * FROM users WHERE id = ?", (user_id,))
         user = cur.fetchone()
 
-    token = issue_token(user_id, email, "user")
+    token = issue_token(user["id"], user["email"], "user")
     return jsonify({"token": token, "role": "user", "user": _user_public(user)}), 201
 
 
@@ -63,7 +61,7 @@ def login():
         role = "user"
 
     with db_cursor() as cur:
-        cur.execute("SELECT * FROM users WHERE email = ?", (email,))
+        cur.execute("SELECT * FROM users WHERE email = %s", (email,))
         user = cur.fetchone()
 
     if not user or not verify_password(password, user["password_hash"]):
@@ -75,14 +73,14 @@ def login():
 
     # role == admin -> issue a one-time code instead of a token
     code = f"{random.randint(0, 999999):06d}"
-    expires_at = (datetime.datetime.utcnow() + datetime.timedelta(minutes=CODE_TTL_MINUTES)).isoformat()
+    expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=CODE_TTL_MINUTES)
 
     with db_cursor(commit=True) as cur:
         cur.execute(
-            "INSERT INTO admin_verifications (user_id, code, expires_at) VALUES (?, ?, ?)",
+            "INSERT INTO admin_verifications (user_id, code, expires_at) VALUES (%s, %s, %s) RETURNING id",
             (user["id"], code, expires_at),
         )
-        verification_id = cur.lastrowid
+        verification_id = cur.fetchone()["id"]
 
     sent_by_email = send_admin_code(user["email"], code)
 
@@ -110,20 +108,20 @@ def verify_admin():
         return jsonify({"error": "verification_id and code are required"}), 400
 
     with db_cursor(commit=True) as cur:
-        cur.execute("SELECT * FROM admin_verifications WHERE id = ?", (verification_id,))
+        cur.execute("SELECT * FROM admin_verifications WHERE id = %s", (verification_id,))
         v = cur.fetchone()
 
         if not v:
             return jsonify({"error": "Verification request not found"}), 404
         if v["used"]:
             return jsonify({"error": "This code has already been used. Please log in again."}), 400
-        if datetime.datetime.fromisoformat(v["expires_at"]) < datetime.datetime.utcnow():
+        if v["expires_at"] < datetime.datetime.utcnow():
             return jsonify({"error": "Code expired. Please request a new one."}), 400
         if v["code"] != code:
             return jsonify({"error": "Incorrect code. Please try again."}), 401
 
-        cur.execute("UPDATE admin_verifications SET used = 1 WHERE id = ?", (verification_id,))
-        cur.execute("SELECT * FROM users WHERE id = ?", (v["user_id"],))
+        cur.execute("UPDATE admin_verifications SET used = TRUE WHERE id = %s", (verification_id,))
+        cur.execute("SELECT * FROM users WHERE id = %s", (v["user_id"],))
         user = cur.fetchone()
 
     token = issue_token(user["id"], user["email"], "admin")
@@ -138,18 +136,18 @@ def resend_admin_code():
         return jsonify({"error": "verification_id is required"}), 400
 
     with db_cursor(commit=True) as cur:
-        cur.execute("SELECT * FROM admin_verifications WHERE id = ?", (verification_id,))
+        cur.execute("SELECT * FROM admin_verifications WHERE id = %s", (verification_id,))
         v = cur.fetchone()
         if not v:
             return jsonify({"error": "Verification request not found"}), 404
 
         code = f"{random.randint(0, 999999):06d}"
-        expires_at = (datetime.datetime.utcnow() + datetime.timedelta(minutes=CODE_TTL_MINUTES)).isoformat()
+        expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=CODE_TTL_MINUTES)
         cur.execute(
-            "UPDATE admin_verifications SET code = ?, expires_at = ?, used = 0 WHERE id = ?",
+            "UPDATE admin_verifications SET code = %s, expires_at = %s, used = FALSE WHERE id = %s",
             (code, expires_at, verification_id),
         )
-        cur.execute("SELECT * FROM users WHERE id = ?", (v["user_id"],))
+        cur.execute("SELECT * FROM users WHERE id = %s", (v["user_id"],))
         user = cur.fetchone()
 
     sent_by_email = send_admin_code(user["email"], code)
@@ -163,7 +161,7 @@ def resend_admin_code():
 @login_required
 def me():
     with db_cursor() as cur:
-        cur.execute("SELECT * FROM users WHERE id = ?", (g.user_id,))
+        cur.execute("SELECT * FROM users WHERE id = %s", (g.user_id,))
         user = cur.fetchone()
     if not user:
         return jsonify({"error": "User not found"}), 404

@@ -1,46 +1,66 @@
 """
-db.py — SQLite connection helper and schema for the K-Ray Enterprise backend.
+db.py — PostgreSQL connection helper and schema for the K-Ray Enterprise
+backend.
 
-Uses the Python standard library sqlite3 module only (no ORM dependency),
-so the backend runs with nothing beyond Flask + PyJWT installed.
+Uses psycopg2 with Render's auto-provided DATABASE_URL environment
+variable when you attach a Render Postgres database to this service.
+Falls back to KRAY_DATABASE_URL if you're running this elsewhere.
+
+Rows are returned as plain dicts (via RealDictCursor) so the rest of
+the codebase can keep using row['column_name'] access exactly like it
+did with sqlite3.Row.
 """
 import os
-import sqlite3
 from contextlib import contextmanager
 
-DB_PATH = os.environ.get("KRAY_DB_PATH", os.path.join(os.path.dirname(__file__), "kray.db"))
+import psycopg2
+import psycopg2.extras
+
+DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("KRAY_DATABASE_URL")
+
+if not DATABASE_URL:
+    raise RuntimeError(
+        "No database configured. Set DATABASE_URL (Render provides this "
+        "automatically when you attach a Postgres database to this "
+        "service) or KRAY_DATABASE_URL."
+    )
+
+# Render's DATABASE_URL sometimes starts with 'postgres://' — psycopg2
+# accepts both, but normalize just in case other tools are stricter.
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    id              SERIAL PRIMARY KEY,
     name            TEXT NOT NULL,
     business        TEXT,
     email           TEXT NOT NULL UNIQUE,
     password_hash   TEXT NOT NULL,
     avatar_url      TEXT,
-    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at      TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS admin_verifications (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    id              SERIAL PRIMARY KEY,
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     code            TEXT NOT NULL,
-    expires_at      TEXT NOT NULL,
-    used            INTEGER NOT NULL DEFAULT 0,
-    created_at      TEXT NOT NULL DEFAULT (datetime('now'))
+    expires_at      TIMESTAMP NOT NULL,
+    used            BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at      TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE IF NOT EXISTS products (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    id              SERIAL PRIMARY KEY,
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name            TEXT NOT NULL,
     category        TEXT,
-    cost            REAL NOT NULL DEFAULT 0,
-    price           REAL NOT NULL DEFAULT 0
+    cost            DOUBLE PRECISION NOT NULL DEFAULT 0,
+    price           DOUBLE PRECISION NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS purchases (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    id              SERIAL PRIMARY KEY,
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     receipt_id      INTEGER,
     date            TEXT NOT NULL,
@@ -48,97 +68,97 @@ CREATE TABLE IF NOT EXISTS purchases (
     category        TEXT,
     supplier        TEXT,
     account         TEXT NOT NULL,
-    qty             REAL NOT NULL,
-    cost            REAL NOT NULL
+    qty             DOUBLE PRECISION NOT NULL,
+    cost            DOUBLE PRECISION NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS sales (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    id              SERIAL PRIMARY KEY,
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     receipt_id      INTEGER,
     date            TEXT NOT NULL,
     item            TEXT NOT NULL,
     customer        TEXT,
     account         TEXT NOT NULL,
-    qty             REAL NOT NULL,
-    price           REAL NOT NULL
+    qty             DOUBLE PRECISION NOT NULL,
+    price           DOUBLE PRECISION NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS credit_sales (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    id              SERIAL PRIMARY KEY,
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     receipt_id      INTEGER,
     date            TEXT NOT NULL,
     customer        TEXT NOT NULL,
     item            TEXT NOT NULL,
-    qty             REAL NOT NULL,
-    price           REAL NOT NULL,
-    total           REAL NOT NULL,
-    paid            REAL NOT NULL DEFAULT 0,
-    remaining       REAL NOT NULL
+    qty             DOUBLE PRECISION NOT NULL,
+    price           DOUBLE PRECISION NOT NULL,
+    total           DOUBLE PRECISION NOT NULL,
+    paid            DOUBLE PRECISION NOT NULL DEFAULT 0,
+    remaining       DOUBLE PRECISION NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS credit_payments (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    id              SERIAL PRIMARY KEY,
     credit_sale_id  INTEGER NOT NULL REFERENCES credit_sales(id) ON DELETE CASCADE,
     date            TEXT NOT NULL,
-    amount          REAL NOT NULL,
+    amount          DOUBLE PRECISION NOT NULL,
     account         TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS expenses (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    id              SERIAL PRIMARY KEY,
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     date            TEXT NOT NULL,
     name            TEXT NOT NULL,
     category        TEXT,
-    amount          REAL NOT NULL,
+    amount          DOUBLE PRECISION NOT NULL,
     account         TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS cash (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    id              SERIAL PRIMARY KEY,
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     date            TEXT NOT NULL,
     source          TEXT,
     account         TEXT NOT NULL,
-    amount          REAL NOT NULL,
+    amount          DOUBLE PRECISION NOT NULL,
     note            TEXT
 );
 
 CREATE TABLE IF NOT EXISTS transfers (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    id              SERIAL PRIMARY KEY,
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     date            TEXT NOT NULL,
     from_account    TEXT NOT NULL,
     to_account      TEXT NOT NULL,
-    amount          REAL NOT NULL,
+    amount          DOUBLE PRECISION NOT NULL,
     note            TEXT
 );
 
 CREATE TABLE IF NOT EXISTS pumice (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    id              SERIAL PRIMARY KEY,
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     date            TEXT NOT NULL,
     type            TEXT NOT NULL CHECK(type IN ('sale','purchase','expense')),
-    desc            TEXT,
-    qty             REAL,
-    amount          REAL NOT NULL
+    item_desc       TEXT,
+    qty             DOUBLE PRECISION,
+    amount          DOUBLE PRECISION NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS stock_logs (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    id              SERIAL PRIMARY KEY,
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     date            TEXT NOT NULL,
     type            TEXT NOT NULL,
     item            TEXT NOT NULL,
-    qty             REAL NOT NULL,
-    cost            REAL,
+    qty             DOUBLE PRECISION NOT NULL,
+    cost            DOUBLE PRECISION,
     comment         TEXT
 );
 
 CREATE TABLE IF NOT EXISTS comments (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    id              SERIAL PRIMARY KEY,
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     author          TEXT NOT NULL,
     text            TEXT NOT NULL,
@@ -148,16 +168,15 @@ CREATE TABLE IF NOT EXISTS comments (
 
 
 def get_connection():
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
     return conn
 
 
 def init_db():
     conn = get_connection()
     try:
-        conn.executescript(SCHEMA)
+        with conn.cursor() as cur:
+            cur.execute(SCHEMA)
         conn.commit()
     finally:
         conn.close()
@@ -165,13 +184,16 @@ def init_db():
 
 @contextmanager
 def db_cursor(commit=False):
-    """Context manager yielding a cursor; commits on success if commit=True."""
+    """Context manager yielding a dict-cursor; commits on success if commit=True."""
     conn = get_connection()
     try:
         cur = conn.cursor()
         yield cur
         if commit:
             conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
