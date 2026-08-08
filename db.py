@@ -45,10 +45,11 @@ CREATE TABLE IF NOT EXISTS purchases (
     receipt_id      INTEGER,
     date            TEXT NOT NULL,
     item            TEXT NOT NULL,
+    category        TEXT,
     supplier        TEXT,
     account         TEXT NOT NULL,
     qty             REAL NOT NULL,
-    price           REAL NOT NULL
+    cost            REAL NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS sales (
@@ -89,8 +90,8 @@ CREATE TABLE IF NOT EXISTS expenses (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     date            TEXT NOT NULL,
+    name            TEXT NOT NULL,
     category        TEXT,
-    description     TEXT,
     amount          REAL NOT NULL,
     account         TEXT NOT NULL
 );
@@ -99,6 +100,7 @@ CREATE TABLE IF NOT EXISTS cash (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     date            TEXT NOT NULL,
+    source          TEXT,
     account         TEXT NOT NULL,
     amount          REAL NOT NULL,
     note            TEXT
@@ -118,19 +120,21 @@ CREATE TABLE IF NOT EXISTS pumice (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     date            TEXT NOT NULL,
-    type            TEXT NOT NULL CHECK(type IN ('sale','cost')),
-    qty             REAL NOT NULL,
-    price           REAL NOT NULL,
+    type            TEXT NOT NULL CHECK(type IN ('sale','purchase','expense')),
+    desc            TEXT,
+    qty             REAL,
     amount          REAL NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS stock_logs (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    product_id      INTEGER REFERENCES products(id) ON DELETE SET NULL,
     date            TEXT NOT NULL,
-    qty_change      REAL NOT NULL,
-    reason          TEXT
+    type            TEXT NOT NULL,
+    item            TEXT NOT NULL,
+    qty             REAL NOT NULL,
+    cost            REAL,
+    comment         TEXT
 );
 
 CREATE TABLE IF NOT EXISTS comments (
