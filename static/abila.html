@@ -1073,8 +1073,8 @@
 
       <!-- ADMIN EMAIL VERIFICATION -->
       <div class="auth-panel hidden" id="panel-admin-verify">
-        <h2>Verify Admin Access</h2>
-        <div class="sub">Enter the 6-digit code sent to <b id="admin-verify-email"></b></div>
+        <h2 id="admin-verify-title">Verify Admin Access</h2>
+        <div class="sub"><span id="admin-verify-subtitle-text">Enter the 6-digit code sent to</span> <b id="admin-verify-email"></b></div>
         <div class="auth-error" id="admin-verify-error"></div>
 
         <div class="verify-demo-box" id="admin-verify-demo">
@@ -2823,10 +2823,10 @@
           method: 'POST',
           body: JSON.stringify({ name, business, email, password: pass })
         });
-        authToken = body.token;
-        localStorage.setItem('kray_auth_token', authToken);
-        state.currentUser = { name: body.user.name, business: body.user.business, email: body.user.email, avatarUrl: body.user.avatarUrl || '' };
-        enterDashboard('user');
+        if (body.requires_verification) {
+          startVerification({ email: body.email, verificationId: body.verification_id, demoCode: body.demo_code, purpose: 'signup' });
+          return;
+        }
       } catch (err) {
         showError('signup-error', err.message || 'Could not create account.');
       }
@@ -2848,6 +2848,7 @@
   let pendingAdminCode = null;      // offline mode
   let pendingVerificationId = null; // server mode
   let pendingAdminEmail = null;     // server mode
+  let pendingPurpose = null;        // 'signup' or 'admin_login' (server mode)
 
   async function handleLogin(e){
     e.preventDefault();
@@ -2869,7 +2870,8 @@
           body: JSON.stringify({ email, password: pass, role })
         });
         if (body.requires_verification) {
-          startAdminVerification({ email: body.email, verificationId: body.verification_id, demoCode: body.demo_code });
+          const purpose = body.reason === 'email_not_verified' ? 'signup' : 'admin_login';
+          startVerification({ email: body.email, verificationId: body.verification_id, demoCode: body.demo_code, purpose });
           return;
         }
         authToken = body.token;
@@ -2889,7 +2891,7 @@
     }
 
     if(role === 'admin'){
-      startAdminVerification({ localUser: user });
+      startVerification({ localUser: user, purpose: 'admin_login' });
       return;
     }
 
@@ -2897,11 +2899,19 @@
     enterDashboard('user');
   }
 
-  function startAdminVerification(opts){
+  function startVerification(opts){
     document.getElementById('admin-verify-error').style.display = 'none';
     document.getElementById('panel-login').classList.add('hidden');
+    document.getElementById('panel-signup').classList.add('hidden');
     document.getElementById('panel-admin-verify').classList.remove('hidden');
     document.getElementById('auth-tab-bar').style.display = 'none';
+
+    pendingPurpose = opts.purpose || 'admin_login';
+    const isSignup = pendingPurpose === 'signup';
+    document.getElementById('admin-verify-title').textContent = isSignup ? 'Verify Your Email' : 'Verify Admin Access';
+    document.getElementById('admin-verify-subtitle-text').textContent = isSignup
+      ? 'Enter the 6-digit code sent to'
+      : 'Enter the 6-digit code sent to your email to continue as Admin —';
 
     if (opts.localUser) {
       // Offline/local vault mode — generate + display the code ourselves
@@ -2935,7 +2945,7 @@
   async function resendAdminCode(){
     if (pendingVerificationId) {
       try {
-        const body = await apiRequest('/api/auth/resend-admin-code', {
+        const body = await apiRequest('/api/auth/resend-code', {
           method: 'POST',
           body: JSON.stringify({ verification_id: pendingVerificationId })
         });
@@ -2960,6 +2970,7 @@
     pendingAdminCode = null;
     pendingVerificationId = null;
     pendingAdminEmail = null;
+    pendingPurpose = null;
     document.getElementById('panel-admin-verify').classList.add('hidden');
     document.getElementById('panel-login').classList.remove('hidden');
     document.getElementById('auth-tab-bar').style.display = 'flex';
@@ -2979,17 +2990,19 @@
 
     if (pendingVerificationId) {
       try {
-        const body = await apiRequest('/api/auth/verify-admin', {
+        const body = await apiRequest('/api/auth/verify-code', {
           method: 'POST',
           body: JSON.stringify({ verification_id: pendingVerificationId, code: entered })
         });
         authToken = body.token;
         localStorage.setItem('kray_auth_token', authToken);
         state.currentUser = { name: body.user.name, business: body.user.business, email: body.user.email, avatarUrl: body.user.avatarUrl || '' };
+        const enteredRole = body.role;
         pendingVerificationId = null;
         pendingAdminEmail = null;
+        pendingPurpose = null;
         document.getElementById('panel-admin-verify').classList.add('hidden');
-        enterDashboard('admin');
+        enterDashboard(enteredRole);
       } catch (err) {
         showError('admin-verify-error', err.message || 'Incorrect code.');
       }
