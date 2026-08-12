@@ -36,13 +36,14 @@ def expect(cond, msg):
         raise SystemExit(1)
 
 
-# 1. Signup
+# 1. Signup now requires email verification — no token yet
 code, body = call("post", "/api/auth/signup", json={
     "name": "Amina Traders", "business": "Amina Wholesale", "email": "amina@example.com", "password": "secret123"
 })
-expect(code == 201, f"signup succeeds (got {code}: {body})")
-user_token = body["token"]
-expect(body["role"] == "user", "signup issues 'user' role token")
+expect(code == 201 and body.get("requires_verification") is True, f"signup requires verification (got {code}: {body})")
+expect("demo_code" in body, "demo mode surfaces the signup code (no SMTP configured in test env)")
+signup_verification_id = body["verification_id"]
+signup_demo_code = body["demo_code"]
 
 # 2. Duplicate signup rejected
 code, body = call("post", "/api/auth/signup", json={
@@ -50,42 +51,71 @@ code, body = call("post", "/api/auth/signup", json={
 })
 expect(code == 409, "duplicate signup rejected")
 
-# 3. Login as user
+# 3. Logging in before verifying email re-sends a signup code instead of a token
 code, body = call("post", "/api/auth/login", json={"email": "amina@example.com", "password": "secret123", "role": "user"})
-expect(code == 200 and body.get("role") == "user", "user login works")
+expect(code == 200 and body.get("requires_verification") is True and body.get("reason") == "email_not_verified",
+       f"login before verification re-sends signup code (got {code}: {body})")
+
+# 4. Wrong code rejected
+code, body = call("post", "/api/auth/verify-code", json={"verification_id": signup_verification_id, "code": "000000"})
+expect(code == 401, "wrong signup code rejected")
+
+# 5. Correct code verifies email and issues a user token
+code, body = call("post", "/api/auth/verify-code", json={"verification_id": signup_verification_id, "code": signup_demo_code})
+expect(code == 200 and body.get("role") == "user" and body["user"]["emailVerified"] is True,
+       f"correct signup code verifies email + issues user token (got {code}: {body})")
 user_token = body["token"]
 
-# 4. Wrong password
+# 6. Reused code rejected
+code, body = call("post", "/api/auth/verify-code", json={"verification_id": signup_verification_id, "code": signup_demo_code})
+expect(code == 400, "reused signup code rejected")
+
+# 7. Now that email is verified, normal login works directly
+code, body = call("post", "/api/auth/login", json={"email": "amina@example.com", "password": "secret123", "role": "user"})
+expect(code == 200 and body.get("role") == "user", "user login works after email verified")
+user_token = body["token"]
+
+# 8. Wrong password
 code, body = call("post", "/api/auth/login", json={"email": "amina@example.com", "password": "wrong", "role": "user"})
 expect(code == 401, "wrong password rejected")
 
-# 5. Admin login requires verification
+# 9. Admin login ALWAYS requires a fresh verification, even for an already-verified email
 code, body = call("post", "/api/auth/login", json={"email": "amina@example.com", "password": "secret123", "role": "admin"})
 expect(code == 200 and body.get("requires_verification") is True, "admin login requires verification")
-expect("demo_code" in body, "demo mode surfaces the code (no SMTP configured in test env)")
+expect("demo_code" in body, "demo mode surfaces the admin code (no SMTP configured in test env)")
 verification_id = body["verification_id"]
 demo_code = body["demo_code"]
 
-# 6. Wrong code rejected
-code, body = call("post", "/api/auth/verify-admin", json={"verification_id": verification_id, "code": "000000"})
+# 10. Wrong admin code rejected
+code, body = call("post", "/api/auth/verify-code", json={"verification_id": verification_id, "code": "000000"})
 expect(code == 401, "wrong admin code rejected")
 
-# 7. Correct code issues admin token
-code, body = call("post", "/api/auth/verify-admin", json={"verification_id": verification_id, "code": demo_code})
+# 11. Correct admin code issues admin token
+code, body = call("post", "/api/auth/verify-code", json={"verification_id": verification_id, "code": demo_code})
 expect(code == 200 and body.get("role") == "admin", "correct admin code issues admin token")
 admin_token = body["token"]
 
-# 8. Reused code rejected
-code, body = call("post", "/api/auth/verify-admin", json={"verification_id": verification_id, "code": demo_code})
+# 12. Reused admin code rejected
+code, body = call("post", "/api/auth/verify-code", json={"verification_id": verification_id, "code": demo_code})
 expect(code == 400, "reused admin code rejected")
 
-# 9. /me works for both roles
+# 13. Resend issues a usable new code
+code, body = call("post", "/api/auth/login", json={"email": "amina@example.com", "password": "secret123", "role": "admin"})
+resend_verification_id = body["verification_id"]
+code, body = call("post", "/api/auth/resend-code", json={"verification_id": resend_verification_id})
+expect(code == 200 and "demo_code" in body, f"resend issues a new code (got {code}: {body})")
+fresh_code = body["demo_code"]
+code, body = call("post", "/api/auth/verify-code", json={"verification_id": resend_verification_id, "code": fresh_code})
+expect(code == 200 and body.get("role") == "admin", "resent code works for admin verification")
+admin_token = body["token"]
+
+# 14. /me works for both roles
 code, body = call("get", "/api/auth/me", token=user_token)
 expect(code == 200 and body["role"] == "user", "/me reflects user role")
 code, body = call("get", "/api/auth/me", token=admin_token)
 expect(code == 200 and body["role"] == "admin", "/me reflects admin role")
 
-# 10. User can create a product; admin cannot
+# 15. User can create a product; admin cannot
 code, body = call("post", "/api/products", token=user_token, json={"name": "Rice 25kg", "category": "Grains", "cost": 2000, "price": 2500})
 expect(code == 201, f"user can create product (got {code}: {body})")
 product_id = body["id"]
@@ -93,7 +123,7 @@ product_id = body["id"]
 code, body = call("post", "/api/products", token=admin_token, json={"name": "Should Fail", "cost": 1, "price": 2})
 expect(code == 403, "admin CANNOT create a product")
 
-# 11. User can update price; admin cannot
+# 16. User can update price; admin cannot
 code, body = call("put", f"/api/products/{product_id}", token=user_token, json={"field": "price", "value": 2600})
 expect(code == 200 and body["price"] == 2600, "user can update product price")
 
@@ -132,8 +162,11 @@ expect(code == 403, "user cannot delete credit sale")
 code, body = call("delete", f"/api/credit-sales/{credit_id}", token=admin_token)
 expect(code == 200, "admin can delete credit sale")
 
-# 15. Admin sees data across all users (oversight); user sees only their own
+# 17. Admin sees data across all users (oversight); user sees only their own
 code, body = call("post", "/api/auth/signup", json={"name": "Second Biz", "email": "second@example.com", "password": "pw123456"})
+second_signup_verification_id = body["verification_id"]
+second_signup_code = body["demo_code"]
+code, body = call("post", "/api/auth/verify-code", json={"verification_id": second_signup_verification_id, "code": second_signup_code})
 second_token = body["token"]
 call("post", "/api/sales", token=second_token, json={"date": "2026-08-07", "item": "Salt 1kg", "account": "cash", "qty": 1, "price": 100})
 
@@ -143,7 +176,7 @@ expect(all(s.get("item") != "Salt 1kg" for s in body), "user only sees their OWN
 code, body = call("get", "/api/sales", token=admin_token)
 expect(any(s.get("item") == "Salt 1kg" for s in body), "admin sees ALL businesses' sales")
 
-# 16. Corrected schemas: purchases (cost+category), expenses (name), cash (source), pumice (desc, 3 types)
+# 18. Corrected schemas: purchases (cost+category), expenses (name), cash (source), pumice (desc, 3 types)
 code, body = call("post", "/api/purchases", token=user_token, json={
     "date": "2026-08-07", "item": "Maize Flour", "category": "Grains",
     "supplier": "ABC Millers", "account": "mpesa", "qty": 10, "cost": 120

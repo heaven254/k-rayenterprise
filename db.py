@@ -38,13 +38,15 @@ CREATE TABLE IF NOT EXISTS users (
     email           TEXT NOT NULL UNIQUE,
     password_hash   TEXT NOT NULL,
     avatar_url      TEXT,
+    email_verified  BOOLEAN NOT NULL DEFAULT FALSE,
     created_at      TIMESTAMP NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS admin_verifications (
+CREATE TABLE IF NOT EXISTS verifications (
     id              SERIAL PRIMARY KEY,
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     code            TEXT NOT NULL,
+    purpose         TEXT NOT NULL CHECK(purpose IN ('signup','admin_login')),
     expires_at      TIMESTAMP NOT NULL,
     used            BOOLEAN NOT NULL DEFAULT FALSE,
     created_at      TIMESTAMP NOT NULL DEFAULT NOW()

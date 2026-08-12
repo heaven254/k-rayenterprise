@@ -25,22 +25,35 @@ SMTP_USE_TLS = os.environ.get("KRAY_SMTP_USE_TLS", "true").lower() != "false"
 DEMO_MODE = not (SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
 
 
-def send_admin_code(to_email: str, code: str) -> bool:
+def send_verification_code(to_email: str, code: str, purpose: str = "signup") -> bool:
     """
-    Sends the verification code. Returns True if a real email was sent,
-    False if running in demo mode (caller should surface the code in the
-    API response / console instead).
+    Sends the verification code for either purpose:
+      - "signup": confirming a new account's email address
+      - "admin_login": the admin second-factor code
+
+    Returns True if a real email was sent, False if running in demo mode
+    (caller should surface the code in the API response / console instead).
     """
     if DEMO_MODE:
-        print(f"[DEMO MODE] Admin verification code for {to_email}: {code}")
+        label = "Signup" if purpose == "signup" else "Admin login"
+        print(f"[DEMO MODE] {label} verification code for {to_email}: {code}")
         return False
 
-    subject = "Your K-Ray Enterprise Admin verification code"
-    body = (
-        f"Your one-time Admin verification code is: {code}\n\n"
-        f"This code expires in 5 minutes. If you did not request admin "
-        f"access, you can safely ignore this email."
-    )
+    if purpose == "admin_login":
+        subject = "Your K-Ray Enterprise Admin verification code"
+        body = (
+            f"Your one-time Admin verification code is: {code}\n\n"
+            f"This code expires in 5 minutes. If you did not request admin "
+            f"access, you can safely ignore this email."
+        )
+    else:
+        subject = "Verify your email for K-Ray Enterprise"
+        body = (
+            f"Welcome to K-Ray Enterprise! Your verification code is: {code}\n\n"
+            f"Enter this code to confirm your email and finish setting up "
+            f"your account. This code expires in 5 minutes."
+        )
+
     msg = MIMEText(body)
     msg["Subject"] = subject
     msg["From"] = SMTP_FROM
@@ -52,3 +65,8 @@ def send_admin_code(to_email: str, code: str) -> bool:
         server.login(SMTP_USER, SMTP_PASSWORD)
         server.sendmail(SMTP_FROM, [to_email], msg.as_string())
     return True
+
+
+# Kept for backward compatibility with any external callers.
+def send_admin_code(to_email: str, code: str) -> bool:
+    return send_verification_code(to_email, code, purpose="admin_login")
