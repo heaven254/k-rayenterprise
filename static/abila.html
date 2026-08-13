@@ -2676,18 +2676,25 @@
     credit: 'Credit Account (Owed)'
   };
 
-  window.addEventListener('DOMContentLoaded', () => {
-    updateServerStatusUI();
-
-    if (vaultExists()) {
-      document.getElementById('vault-panel-create').classList.add('hidden');
-      document.getElementById('vault-panel-unlock').classList.remove('hidden');
-      const unlockInput = document.getElementById('vault-unlock-password');
-      if (unlockInput) setTimeout(() => unlockInput.focus(), 50);
-    } else {
-      document.getElementById('vault-panel-create').classList.remove('hidden');
-      document.getElementById('vault-panel-unlock').classList.add('hidden');
+  async function tryAutoResumeSession() {
+    if (!isServerMode() || !authToken) return false;
+    try {
+      const body = await apiRequest('/api/auth/me');
+      state.currentUser = { name: body.user.name, business: body.user.business, email: body.user.email, avatarUrl: body.user.avatarUrl || '' };
+      document.getElementById('vault-screen').classList.add('hidden');
+      document.getElementById('auth-screen').classList.add('hidden');
+      await enterDashboard(body.role);
+      return true;
+    } catch (err) {
+      // Stored token is invalid/expired — clear it and fall through to a normal login
+      authToken = null;
+      localStorage.removeItem('kray_auth_token');
+      return false;
     }
+  }
+
+  window.addEventListener('DOMContentLoaded', async () => {
+    updateServerStatusUI();
 
     const rememberedEmail = localStorage.getItem('kray_remembered_email');
     if (rememberedEmail) {
@@ -2715,6 +2722,29 @@
         }
       });
     });
+
+    if (isServerMode()) {
+      // Server mode: skip the local encryption vault entirely (your data
+      // lives on the server now) and try to resume your last session
+      // automatically, pulling fresh data every time you load the page.
+      document.getElementById('vault-screen').classList.add('hidden');
+      const resumed = await tryAutoResumeSession();
+      if (!resumed) {
+        document.getElementById('auth-screen').classList.remove('hidden');
+      }
+      return;
+    }
+
+    // Offline/local mode: use the encrypted vault as before.
+    if (vaultExists()) {
+      document.getElementById('vault-panel-create').classList.add('hidden');
+      document.getElementById('vault-panel-unlock').classList.remove('hidden');
+      const unlockInput = document.getElementById('vault-unlock-password');
+      if (unlockInput) setTimeout(() => unlockInput.focus(), 50);
+    } else {
+      document.getElementById('vault-panel-create').classList.remove('hidden');
+      document.getElementById('vault-panel-unlock').classList.add('hidden');
+    }
   });
 
   function finishBootAfterVault() {
