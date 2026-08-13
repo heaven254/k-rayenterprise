@@ -169,6 +169,14 @@ CREATE TABLE IF NOT EXISTS comments (
 """
 
 
+# Lightweight migrations for columns/tables added after a database was
+# already created by an earlier version of this schema. Each statement
+# is safe to run repeatedly (IF NOT EXISTS everywhere).
+MIGRATIONS = """
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE;
+"""
+
+
 def get_connection():
     conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
     return conn
@@ -179,6 +187,7 @@ def init_db():
     try:
         with conn.cursor() as cur:
             cur.execute(SCHEMA)
+            cur.execute(MIGRATIONS)
         conn.commit()
     finally:
         conn.close()
