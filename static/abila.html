@@ -807,24 +807,7 @@
     .receipt-paper{box-shadow:none;}
   }
 
-  /* ===================== ADMIN ROLE ===================== */
-  .role-toggle{
-    display:flex;gap:8px;margin-bottom:16px;
-  }
-  .role-toggle label{
-    flex:1;display:flex;align-items:center;justify-content:center;gap:6px;
-    padding:9px 10px;border:1px solid var(--line);border-radius:8px;
-    cursor:pointer;font-size:12.5px;font-weight:600;letter-spacing:.02em;
-    color:var(--text-muted);transition:all .15s ease;text-transform:uppercase;
-  }
-  .role-toggle input{display:none;}
-  .role-toggle input:checked + span{color:var(--cyan);}
-  .role-toggle label:has(input:checked){
-    border-color:var(--cyan);background:var(--cyan-dim);color:var(--cyan);
-  }
-  .admin-hint{
-    font-size:11.5px;color:var(--text-dim);margin:-8px 0 16px;line-height:1.5;
-  }
+  /* ===================== EMAIL VERIFICATION ===================== */
   .verify-code-inputs{
     display:flex;gap:8px;justify-content:center;margin:18px 0;
   }
@@ -837,32 +820,6 @@
     padding:10px 12px;font-size:12px;color:var(--amber);margin-bottom:16px;text-align:center;
   }
   .verify-demo-box b{font-family:var(--mono);font-size:15px;letter-spacing:3px;}
-  .admin-badge{
-    display:inline-flex;align-items:center;gap:5px;
-    background:var(--red-dim);color:var(--red);border:1px solid rgba(242,131,122,.35);
-    font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
-    padding:3px 8px;border-radius:20px;margin-left:8px;
-  }
-  #app-screen.role-admin .user-action,
-  #app-screen.role-admin form{
-    pointer-events:none !important;
-    opacity:.4;
-    filter:grayscale(60%);
-  }
-  #app-screen.role-admin .row-del{
-    pointer-events:auto !important;
-    opacity:1;
-    filter:none;
-  }
-  .admin-lock-note{
-    display:none;
-    background:var(--red-dim);color:var(--red);border:1px solid rgba(242,131,122,.3);
-    border-radius:8px;padding:8px 12px;font-size:12px;margin-bottom:14px;
-  }
-  #app-screen.role-admin .admin-lock-note{display:block;}
-  #app-screen.role-user .row-del{
-    opacity:.35;cursor:not-allowed;
-  }
 
   /* ===================== VAULT LOCK SCREEN ===================== */
   #vault-screen{
@@ -1043,12 +1000,6 @@
 
         <div class="auth-divider">OR WITH EMAIL</div>
 
-        <div class="role-toggle">
-          <label><input type="radio" name="login-role" value="user" checked onchange="onLoginRoleChange()"><span>👤 User</span></label>
-          <label><input type="radio" name="login-role" value="admin" onchange="onLoginRoleChange()"><span>🛡 Admin</span></label>
-        </div>
-        <div class="admin-hint hidden" id="admin-role-hint">Admin access is restricted to deleting records. You'll need to verify a one-time code sent to your email after signing in.</div>
-
         <form onsubmit="handleLogin(event)">
           <div class="field">
             <label>Email</label>
@@ -1218,11 +1169,10 @@
       <div class="user-chip">
         <div class="user-avatar" id="user-avatar">K</div>
         <div>
-          <div class="u-name" id="user-name">— <span class="admin-badge hidden" id="user-role-badge">🛡 Admin</span></div>
+          <div class="u-name" id="user-name">—</div>
           <div class="u-email" id="user-business">—</div>
         </div>
       </div>
-      <div class="admin-lock-note">🛡 Admin mode: only deletions are enabled. Log out and sign in as User for full access.</div>
       <button class="btn btn-ghost btn-small" style="width:100%; margin-bottom:8px;" onclick="lockVault()">🔒 Lock Vault</button>
       <button class="btn btn-ghost btn-small" style="width:100%" onclick="logout()">Log Out</button>
     </div>
@@ -2683,7 +2633,7 @@
       state.currentUser = { name: body.user.name, business: body.user.business, email: body.user.email, avatarUrl: body.user.avatarUrl || '' };
       document.getElementById('vault-screen').classList.add('hidden');
       document.getElementById('auth-screen').classList.add('hidden');
-      await enterDashboard(body.role);
+      await enterDashboard();
       return true;
     } catch (err) {
       // Stored token is invalid/expired — clear it and fall through to a normal login
@@ -2815,12 +2765,6 @@
     document.getElementById('forgot-error').style.display = 'none';
   }
 
-  function onLoginRoleChange(){
-    const role = document.querySelector('input[name="login-role"]:checked').value;
-    document.getElementById('admin-role-hint').classList.toggle('hidden', role !== 'admin');
-    document.getElementById('login-submit-btn').textContent = role === 'admin' ? 'Continue as Admin' : 'Log In';
-  }
-
   function showError(id, msg){
     const el = document.getElementById(id);
     el.textContent = msg;
@@ -2854,7 +2798,7 @@
           body: JSON.stringify({ name, business, email, password: pass })
         });
         if (body.requires_verification) {
-          startVerification({ email: body.email, verificationId: body.verification_id, demoCode: body.demo_code, purpose: 'signup' });
+          startVerification({ email: body.email, verificationId: body.verification_id, demoCode: body.demo_code });
           return;
         }
       } catch (err) {
@@ -2871,21 +2815,19 @@
     state.users.push(user);
     state.currentUser = user;
     saveStateToStorage();
-    enterDashboard('user');
+    enterDashboard();
   }
 
-  let pendingAdminUser = null;      // offline mode
-  let pendingAdminCode = null;      // offline mode
+  let pendingLocalUser = null;      // offline mode
+  let pendingLocalCode = null;      // offline mode
   let pendingVerificationId = null; // server mode
-  let pendingAdminEmail = null;     // server mode
-  let pendingPurpose = null;        // 'signup' or 'admin_login' (server mode)
+  let pendingEmail = null;          // server mode
 
   async function handleLogin(e){
     e.preventDefault();
     const email = document.getElementById('login-email').value.trim().toLowerCase();
     const pass = document.getElementById('login-password').value;
     const rememberMe = document.getElementById('remember-me').checked;
-    const role = document.querySelector('input[name="login-role"]:checked').value;
 
     if (rememberMe) {
       localStorage.setItem('kray_remembered_email', email);
@@ -2897,17 +2839,16 @@
       try {
         const body = await apiRequest('/api/auth/login', {
           method: 'POST',
-          body: JSON.stringify({ email, password: pass, role })
+          body: JSON.stringify({ email, password: pass })
         });
         if (body.requires_verification) {
-          const purpose = body.reason === 'email_not_verified' ? 'signup' : 'admin_login';
-          startVerification({ email: body.email, verificationId: body.verification_id, demoCode: body.demo_code, purpose });
+          startVerification({ email: body.email, verificationId: body.verification_id, demoCode: body.demo_code });
           return;
         }
         authToken = body.token;
         localStorage.setItem('kray_auth_token', authToken);
         state.currentUser = { name: body.user.name, business: body.user.business, email: body.user.email, avatarUrl: body.user.avatarUrl || '' };
-        enterDashboard('user');
+        enterDashboard();
       } catch (err) {
         showError('login-error', err.message || 'No matching account found. Check your details or sign up.');
       }
@@ -2920,13 +2861,8 @@
       return;
     }
 
-    if(role === 'admin'){
-      startVerification({ localUser: user, purpose: 'admin_login' });
-      return;
-    }
-
     state.currentUser = user;
-    enterDashboard('user');
+    enterDashboard();
   }
 
   function startVerification(opts){
@@ -2936,28 +2872,24 @@
     document.getElementById('panel-admin-verify').classList.remove('hidden');
     document.getElementById('auth-tab-bar').style.display = 'none';
 
-    pendingPurpose = opts.purpose || 'admin_login';
-    const isSignup = pendingPurpose === 'signup';
-    document.getElementById('admin-verify-title').textContent = isSignup ? 'Verify Your Email' : 'Verify Admin Access';
-    document.getElementById('admin-verify-subtitle-text').textContent = isSignup
-      ? 'Enter the 6-digit code sent to'
-      : 'Enter the 6-digit code sent to your email to continue as Admin —';
+    document.getElementById('admin-verify-title').textContent = 'Verify Your Email';
+    document.getElementById('admin-verify-subtitle-text').textContent = 'Enter the 6-digit code sent to';
 
     if (opts.localUser) {
       // Offline/local vault mode — generate + display the code ourselves
-      pendingAdminUser = opts.localUser;
+      pendingLocalUser = opts.localUser;
       pendingVerificationId = null;
-      pendingAdminEmail = null;
-      pendingAdminCode = String(Math.floor(100000 + Math.random() * 900000));
+      pendingEmail = null;
+      pendingLocalCode = String(Math.floor(100000 + Math.random() * 900000));
       document.getElementById('admin-verify-email').textContent = opts.localUser.email;
       document.getElementById('admin-verify-demo').classList.remove('hidden');
-      document.getElementById('admin-verify-code-display').textContent = pendingAdminCode;
+      document.getElementById('admin-verify-code-display').textContent = pendingLocalCode;
     } else {
       // Server mode — code comes from (or is emailed by) the backend
-      pendingAdminUser = null;
-      pendingAdminCode = null;
+      pendingLocalUser = null;
+      pendingLocalCode = null;
       pendingVerificationId = opts.verificationId;
-      pendingAdminEmail = opts.email;
+      pendingEmail = opts.email;
       document.getElementById('admin-verify-email').textContent = opts.email;
       if (opts.demoCode) {
         document.getElementById('admin-verify-demo').classList.remove('hidden');
@@ -2989,23 +2921,20 @@
       }
       return;
     }
-    if(!pendingAdminUser) return;
-    pendingAdminCode = String(Math.floor(100000 + Math.random() * 900000));
-    document.getElementById('admin-verify-code-display').textContent = pendingAdminCode;
+    if(!pendingLocalUser) return;
+    pendingLocalCode = String(Math.floor(100000 + Math.random() * 900000));
+    document.getElementById('admin-verify-code-display').textContent = pendingLocalCode;
     document.getElementById('admin-verify-error').style.display = 'none';
   }
 
   function cancelAdminVerify(){
-    pendingAdminUser = null;
-    pendingAdminCode = null;
+    pendingLocalUser = null;
+    pendingLocalCode = null;
     pendingVerificationId = null;
-    pendingAdminEmail = null;
-    pendingPurpose = null;
+    pendingEmail = null;
     document.getElementById('panel-admin-verify').classList.add('hidden');
     document.getElementById('panel-login').classList.remove('hidden');
     document.getElementById('auth-tab-bar').style.display = 'flex';
-    document.querySelector('input[name="login-role"][value="user"]').checked = true;
-    onLoginRoleChange();
   }
 
   async function handleAdminVerify(e){
@@ -3027,28 +2956,26 @@
         authToken = body.token;
         localStorage.setItem('kray_auth_token', authToken);
         state.currentUser = { name: body.user.name, business: body.user.business, email: body.user.email, avatarUrl: body.user.avatarUrl || '' };
-        const enteredRole = body.role;
         pendingVerificationId = null;
-        pendingAdminEmail = null;
-        pendingPurpose = null;
+        pendingEmail = null;
         document.getElementById('panel-admin-verify').classList.add('hidden');
-        enterDashboard(enteredRole);
+        enterDashboard();
       } catch (err) {
         showError('admin-verify-error', err.message || 'Incorrect code.');
       }
       return;
     }
 
-    if(entered !== pendingAdminCode){
+    if(entered !== pendingLocalCode){
       showError('admin-verify-error', 'Incorrect code. Please try again.');
       return;
     }
 
-    state.currentUser = pendingAdminUser;
-    pendingAdminUser = null;
-    pendingAdminCode = null;
+    state.currentUser = pendingLocalUser;
+    pendingLocalUser = null;
+    pendingLocalCode = null;
     document.getElementById('panel-admin-verify').classList.add('hidden');
-    enterDashboard('admin');
+    enterDashboard();
   }
 
   function loadDemoData(){
@@ -3185,12 +3112,9 @@
     }
   }
 
-  async function enterDashboard(role){
-    state.currentRole = role || 'user';
+  async function enterDashboard(){
     document.getElementById('auth-screen').classList.add('hidden');
     document.getElementById('app-screen').classList.remove('hidden');
-    document.getElementById('app-screen').classList.toggle('role-admin', state.currentRole === 'admin');
-    document.getElementById('app-screen').classList.toggle('role-user', state.currentRole !== 'admin');
     updateUserProfileDisplay();
 
     if (isServerMode()) {
@@ -3205,27 +3129,10 @@
     renderAll();
   }
 
-  function isAdmin(){
-    return state.currentRole === 'admin';
-  }
-
-  function requireAdmin(action){
-    if(isAdmin()) return true;
-    alert('Only an Admin can ' + (action || 'delete this') + '. Please log out and log back in as Admin.');
-    return false;
-  }
-
   function updateUserProfileDisplay() {
     const u = state.currentUser;
     if(!u) return;
-    const nameEl = document.getElementById('user-name');
-    nameEl.textContent = '';
-    nameEl.appendChild(document.createTextNode(u.name + ' '));
-    const badge = document.createElement('span');
-    badge.id = 'user-role-badge';
-    badge.className = 'admin-badge' + (isAdmin() ? '' : ' hidden');
-    badge.textContent = '🛡 Admin';
-    nameEl.appendChild(badge);
+    document.getElementById('user-name').textContent = u.name;
     document.getElementById('user-business').textContent = u.business || u.email;
     
     const sidebarAvatar = document.getElementById('user-avatar');
@@ -3311,14 +3218,10 @@
 
   function logout(){
     state.currentUser = null;
-    state.currentRole = null;
     authToken = null;
     localStorage.removeItem('kray_auth_token');
-    document.getElementById('app-screen').classList.remove('role-admin', 'role-user');
     document.getElementById('app-screen').classList.add('hidden');
     document.getElementById('auth-screen').classList.remove('hidden');
-    document.querySelector('input[name="login-role"][value="user"]').checked = true;
-    onLoginRoleChange();
     switchAuthTab('login');
   }
 
@@ -3640,7 +3543,6 @@
   }
 
   async function deleteCreditSale(creditId) {
-    if (!requireAdmin('delete credit loan entries')) return;
     if (!confirm('Are you sure you want to delete this credit loan entry?')) return;
     if (isServerMode()) {
       try { await apiRequest('/api/credit-sales/' + creditId, { method: 'DELETE' }); }
@@ -3806,7 +3708,6 @@
   }
 
   async function deletePumice(id){
-    if (!requireAdmin('delete Pumice records')) return;
     if(!confirm('Delete this Pumice record?')) return;
     if (isServerMode()) {
       try { await apiRequest('/api/pumice/' + id, { method: 'DELETE' }); }
@@ -3954,7 +3855,6 @@
   }
 
   async function deleteProduct(id) {
-    if (!requireAdmin('delete products')) return;
     if (!confirm('Delete this product from catalog?')) return;
     if (isServerMode()) {
       try { await apiRequest('/api/products/' + id, { method: 'DELETE' }); }
@@ -4112,7 +4012,6 @@
   }
 
   async function deleteStockLog(id) {
-    if (!requireAdmin('delete stock adjustment logs')) return;
     if (!confirm('Delete this stock adjustment log?')) return;
     if (isServerMode()) {
       try { await apiRequest('/api/stock-logs/' + id, { method: 'DELETE' }); }
@@ -4588,7 +4487,6 @@
   }
 
   async function deletePurchase(id) {
-    if (!requireAdmin('delete purchase records')) return;
     if (!confirm('Delete this purchase record?')) return;
     if (isServerMode()) {
       try { await apiRequest('/api/purchases/' + id, { method: 'DELETE' }); }
@@ -4600,7 +4498,6 @@
   }
 
   async function deleteSale(id) {
-    if (!requireAdmin('delete sale records')) return;
     if (!confirm('Delete this sale record?')) return;
     if (isServerMode()) {
       try { await apiRequest('/api/sales/' + id, { method: 'DELETE' }); }
@@ -4809,7 +4706,6 @@
   }
 
   async function deleteExpense(id){
-    if (!requireAdmin('delete expenses')) return;
     if(!confirm('Delete this expense?')) return;
     if (isServerMode()) {
       try { await apiRequest('/api/expenses/' + id, { method: 'DELETE' }); }
@@ -4919,7 +4815,6 @@
   }
 
   async function deleteCash(id){
-    if (!requireAdmin('delete cash injection entries')) return;
     if(!confirm('Delete this cash injection entry?')) return;
     if (isServerMode()) {
       try { await apiRequest('/api/cash/' + id, { method: 'DELETE' }); }
@@ -4967,7 +4862,6 @@
   }
 
   async function deleteTransfer(id){
-    if (!requireAdmin('delete account transfers')) return;
     if(!confirm('Delete this account transfer?')) return;
     if (isServerMode()) {
       try { await apiRequest('/api/transfers/' + id, { method: 'DELETE' }); }
