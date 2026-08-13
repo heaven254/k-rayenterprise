@@ -1,10 +1,10 @@
 """
-mailer.py — sends the admin one-time verification code by email.
+mailer.py — sends the one-time email verification code used at signup.
 
 If SMTP environment variables are not configured, the backend runs in
 "demo mode": the code is printed to the server console and also returned
-directly in the API response (mirroring the standalone HTML prototype),
-so the whole flow is testable with zero external setup.
+directly in the API response, so the whole flow is testable with zero
+external setup.
 
 To enable real email delivery, set these environment variables:
   KRAY_SMTP_HOST, KRAY_SMTP_PORT, KRAY_SMTP_USER, KRAY_SMTP_PASSWORD,
@@ -27,46 +27,37 @@ DEMO_MODE = not (SMTP_HOST and SMTP_USER and SMTP_PASSWORD)
 
 def send_verification_code(to_email: str, code: str, purpose: str = "signup") -> bool:
     """
-    Sends the verification code for either purpose:
-      - "signup": confirming a new account's email address
-      - "admin_login": the admin second-factor code
-
-    Returns True if a real email was sent, False if running in demo mode
-    (caller should surface the code in the API response / console instead).
+    Sends the email verification code. Returns True if a real email was
+    sent, False if running in demo mode or if sending failed for any
+    reason (caller should surface the code directly in that case instead
+    of leaving the person stuck).
     """
     if DEMO_MODE:
-        label = "Signup" if purpose == "signup" else "Admin login"
-        print(f"[DEMO MODE] {label} verification code for {to_email}: {code}")
+        print(f"[DEMO MODE] Verification code for {to_email}: {code}")
         return False
 
-    if purpose == "admin_login":
-        subject = "Your K-Ray Enterprise Admin verification code"
-        body = (
-            f"Your one-time Admin verification code is: {code}\n\n"
-            f"This code expires in 5 minutes. If you did not request admin "
-            f"access, you can safely ignore this email."
-        )
-    else:
-        subject = "Verify your email for K-Ray Enterprise"
-        body = (
-            f"Welcome to K-Ray Enterprise! Your verification code is: {code}\n\n"
-            f"Enter this code to confirm your email and finish setting up "
-            f"your account. This code expires in 5 minutes."
-        )
+    subject = "Verify your email for K-Ray Enterprise"
+    body = (
+        f"Welcome to K-Ray Enterprise! Your verification code is: {code}\n\n"
+        f"Enter this code to confirm your email and finish setting up "
+        f"your account. This code expires in 5 minutes."
+    )
 
     msg = MIMEText(body)
     msg["Subject"] = subject
     msg["From"] = SMTP_FROM
     msg["To"] = to_email
 
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-        if SMTP_USE_TLS:
-            server.starttls()
-        server.login(SMTP_USER, SMTP_PASSWORD)
-        server.sendmail(SMTP_FROM, [to_email], msg.as_string())
-    return True
-
-
-# Kept for backward compatibility with any external callers.
-def send_admin_code(to_email: str, code: str) -> bool:
-    return send_verification_code(to_email, code, purpose="admin_login")
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=8) as server:
+            if SMTP_USE_TLS:
+                server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(SMTP_FROM, [to_email], msg.as_string())
+        return True
+    except Exception as e:
+        # Never let a slow/unreachable mail server break signup/login.
+        # Fall back to surfacing the code directly instead of hanging
+        # the request until Render's proxy times it out.
+        print(f"[MAILER ERROR] Could not send verification code to {to_email}: {e}")
+        return False

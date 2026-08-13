@@ -1,6 +1,10 @@
 """
-routes_auth.py — signup, login (user or admin), admin email-code
-verification, and the "who am I" endpoint.
+routes_auth.py — signup (with email verification), login, and the
+"who am I" endpoint.
+
+Every account must verify its email once (right after signup) before
+it can log in. There's no separate admin role — once logged in, every
+account has full access to the shared business data.
 """
 import random
 import datetime
@@ -8,7 +12,7 @@ from flask import Blueprint, request, jsonify, g
 
 from db import db_cursor
 from auth import hash_password, verify_password, issue_token, login_required
-from mailer import send_admin_code, DEMO_MODE
+from mailer import send_verification_code, DEMO_MODE
 
 bp = Blueprint("auth", __name__, url_prefix="/api/auth")
 
@@ -22,7 +26,33 @@ def _user_public(row):
         "business": row["business"],
         "email": row["email"],
         "avatarUrl": row["avatar_url"],
+        "emailVerified": row["email_verified"],
     }
+
+
+def _create_verification(cur, user_id):
+    code = f"{random.randint(0, 999999):06d}"
+    expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=CODE_TTL_MINUTES)
+    cur.execute(
+        "INSERT INTO verifications (user_id, code, purpose, expires_at) VALUES (%s, %s, 'signup', %s) RETURNING id",
+        (user_id, code, expires_at),
+    )
+    verification_id = cur.fetchone()["id"]
+    return verification_id, code
+
+
+def _verification_response(verification_id, email, code, sent_by_email):
+    resp = {
+        "requires_verification": True,
+        "verification_id": verification_id,
+        "email": email,
+        "demo_mode": DEMO_MODE,
+    }
+    if not sent_by_email:
+        # Demo mode (or a failed email send): surface the code directly
+        # so the flow is never a dead end.
+        resp["demo_code"] = code
+    return resp
 
 
 @bp.post("/signup")
@@ -42,13 +72,15 @@ def signup():
             return jsonify({"error": "An account with this email already exists"}), 409
 
         cur.execute(
-            "INSERT INTO users (name, business, email, password_hash) VALUES (%s, %s, %s, %s) RETURNING *",
+            "INSERT INTO users (name, business, email, password_hash) VALUES (%s, %s, %s, %s) RETURNING id",
             (name, business, email, hash_password(password)),
         )
-        user = cur.fetchone()
+        user_id = cur.fetchone()["id"]
 
-    token = issue_token(user["id"], user["email"], "user")
-    return jsonify({"token": token, "role": "user", "user": _user_public(user)}), 201
+        verification_id, code = _create_verification(cur, user_id)
+
+    sent_by_email = send_verification_code(email, code, purpose="signup")
+    return jsonify(_verification_response(verification_id, email, code, sent_by_email)), 201
 
 
 @bp.post("/login")
@@ -56,9 +88,6 @@ def login():
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
     password = data.get("password") or ""
-    role = data.get("role") or "user"
-    if role not in ("user", "admin"):
-        role = "user"
 
     with db_cursor() as cur:
         cur.execute("SELECT * FROM users WHERE email = %s", (email,))
@@ -67,39 +96,22 @@ def login():
     if not user or not verify_password(password, user["password_hash"]):
         return jsonify({"error": "No matching account found. Check your details or sign up."}), 401
 
-    if role == "user":
-        token = issue_token(user["id"], user["email"], "user")
-        return jsonify({"token": token, "role": "user", "user": _user_public(user)})
+    if not user["email_verified"]:
+        # Email was never confirmed after signup — send a fresh code
+        # instead of letting them log in.
+        with db_cursor(commit=True) as cur:
+            verification_id, code = _create_verification(cur, user["id"])
+        sent_by_email = send_verification_code(user["email"], code, purpose="signup")
+        resp = _verification_response(verification_id, user["email"], code, sent_by_email)
+        resp["reason"] = "email_not_verified"
+        return jsonify(resp)
 
-    # role == admin -> issue a one-time code instead of a token
-    code = f"{random.randint(0, 999999):06d}"
-    expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=CODE_TTL_MINUTES)
-
-    with db_cursor(commit=True) as cur:
-        cur.execute(
-            "INSERT INTO admin_verifications (user_id, code, expires_at) VALUES (%s, %s, %s) RETURNING id",
-            (user["id"], code, expires_at),
-        )
-        verification_id = cur.fetchone()["id"]
-
-    sent_by_email = send_admin_code(user["email"], code)
-
-    resp = {
-        "requires_verification": True,
-        "verification_id": verification_id,
-        "email": user["email"],
-        "demo_mode": DEMO_MODE,
-    }
-    if not sent_by_email:
-        # Demo mode: surface the code directly so the flow is testable
-        # without any SMTP setup, mirroring the front-end prototype.
-        resp["demo_code"] = code
-
-    return jsonify(resp)
+    token = issue_token(user["id"], user["email"])
+    return jsonify({"token": token, "user": _user_public(user)})
 
 
-@bp.post("/verify-admin")
-def verify_admin():
+@bp.post("/verify-code")
+def verify_code():
     data = request.get_json(silent=True) or {}
     verification_id = data.get("verification_id")
     code = str(data.get("code") or "").strip()
@@ -108,7 +120,7 @@ def verify_admin():
         return jsonify({"error": "verification_id and code are required"}), 400
 
     with db_cursor(commit=True) as cur:
-        cur.execute("SELECT * FROM admin_verifications WHERE id = %s", (verification_id,))
+        cur.execute("SELECT * FROM verifications WHERE id = %s", (verification_id,))
         v = cur.fetchone()
 
         if not v:
@@ -120,23 +132,24 @@ def verify_admin():
         if v["code"] != code:
             return jsonify({"error": "Incorrect code. Please try again."}), 401
 
-        cur.execute("UPDATE admin_verifications SET used = TRUE WHERE id = %s", (verification_id,))
+        cur.execute("UPDATE verifications SET used = TRUE WHERE id = %s", (verification_id,))
+        cur.execute("UPDATE users SET email_verified = TRUE WHERE id = %s", (v["user_id"],))
         cur.execute("SELECT * FROM users WHERE id = %s", (v["user_id"],))
         user = cur.fetchone()
 
-    token = issue_token(user["id"], user["email"], "admin")
-    return jsonify({"token": token, "role": "admin", "user": _user_public(user)})
+    token = issue_token(user["id"], user["email"])
+    return jsonify({"token": token, "user": _user_public(user)})
 
 
-@bp.post("/resend-admin-code")
-def resend_admin_code():
+@bp.post("/resend-code")
+def resend_code():
     data = request.get_json(silent=True) or {}
     verification_id = data.get("verification_id")
     if not verification_id:
         return jsonify({"error": "verification_id is required"}), 400
 
     with db_cursor(commit=True) as cur:
-        cur.execute("SELECT * FROM admin_verifications WHERE id = %s", (verification_id,))
+        cur.execute("SELECT * FROM verifications WHERE id = %s", (verification_id,))
         v = cur.fetchone()
         if not v:
             return jsonify({"error": "Verification request not found"}), 404
@@ -144,17 +157,14 @@ def resend_admin_code():
         code = f"{random.randint(0, 999999):06d}"
         expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=CODE_TTL_MINUTES)
         cur.execute(
-            "UPDATE admin_verifications SET code = %s, expires_at = %s, used = FALSE WHERE id = %s",
+            "UPDATE verifications SET code = %s, expires_at = %s, used = FALSE WHERE id = %s",
             (code, expires_at, verification_id),
         )
         cur.execute("SELECT * FROM users WHERE id = %s", (v["user_id"],))
         user = cur.fetchone()
 
-    sent_by_email = send_admin_code(user["email"], code)
-    resp = {"requires_verification": True, "verification_id": verification_id, "demo_mode": DEMO_MODE}
-    if not sent_by_email:
-        resp["demo_code"] = code
-    return jsonify(resp)
+    sent_by_email = send_verification_code(user["email"], code, purpose="signup")
+    return jsonify(_verification_response(verification_id, user["email"], code, sent_by_email))
 
 
 @bp.get("/me")
@@ -165,4 +175,4 @@ def me():
         user = cur.fetchone()
     if not user:
         return jsonify({"error": "User not found"}), 404
-    return jsonify({"user": _user_public(user), "role": g.role})
+    return jsonify({"user": _user_public(user)})

@@ -3,19 +3,15 @@ routes_resources.py — CRUD endpoints for every business record type:
 products, purchases, sales, credit sales & payments, expenses, cash,
 transfers, pumice, stock logs, and comments.
 
-Permission model (enforced here, not just in the UI):
-  - GET      -> any logged-in user or admin (login_required).
-                 Regular users only see their own business's records;
-                 admins see every business's records (oversight role).
-  - POST     -> write_required (role == "user" only). Records are always
-                 attached to the caller's own user_id.
-  - DELETE   -> admin_required (role == "admin" only), can delete any
-                 record regardless of which user owns it.
+This is a single shared business used by a small team — every logged-in
+user can see and edit every record, regardless of who created it.
+user_id is still stored on each row (who created it, for reference),
+but never used to restrict access.
 """
 from flask import Blueprint, request, jsonify, g
 
 from db import db_cursor, rows_to_list, row_to_dict
-from auth import login_required, write_required, admin_required
+from auth import login_required
 
 bp = Blueprint("resources", __name__, url_prefix="/api")
 
@@ -44,8 +40,7 @@ def _row_out(row, reverse_map):
 # ---------------------------------------------------------------------
 def register_simple_resource(url, table, fields, numeric_fields=(), column_map=None):
     """
-    Registers GET/POST/DELETE for a straightforward table that has a
-    user_id column and an auto-increment id primary key.
+    Registers GET/POST/DELETE for a straightforward shared table.
 
     fields: ordered list of API field names accepted from the JSON body
     numeric_fields: subset of `fields` that should be coerced to float
@@ -59,10 +54,7 @@ def register_simple_resource(url, table, fields, numeric_fields=(), column_map=N
 
     def list_records():
         with db_cursor() as cur:
-            if g.role == "admin":
-                cur.execute(f"SELECT * FROM {table} ORDER BY id DESC")
-            else:
-                cur.execute(f"SELECT * FROM {table} WHERE user_id = %s ORDER BY id DESC", (g.user_id,))
+            cur.execute(f"SELECT * FROM {table} ORDER BY id DESC")
             rows = cur.fetchall()
         return jsonify([_row_out(r, reverse_map) for r in rows])
 
@@ -94,8 +86,8 @@ def register_simple_resource(url, table, fields, numeric_fields=(), column_map=N
     delete_record.__name__ = f"delete_{table}"
 
     bp.get(f"/{url}")(login_required(list_records))
-    bp.post(f"/{url}")(write_required(create_record))
-    bp.delete(f"/{url}/<int:record_id>")(admin_required(delete_record))
+    bp.post(f"/{url}")(login_required(create_record))
+    bp.delete(f"/{url}/<int:record_id>")(login_required(delete_record))
 
 
 register_simple_resource(
@@ -155,16 +147,13 @@ register_simple_resource(
 @login_required
 def list_products():
     with db_cursor() as cur:
-        if g.role == "admin":
-            cur.execute("SELECT * FROM products ORDER BY id DESC")
-        else:
-            cur.execute("SELECT * FROM products WHERE user_id = %s ORDER BY id DESC", (g.user_id,))
+        cur.execute("SELECT * FROM products ORDER BY id DESC")
         rows = cur.fetchall()
     return jsonify(rows_to_list(rows))
 
 
 @bp.post("/products")
-@write_required
+@login_required
 def create_product():
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
@@ -184,7 +173,7 @@ def create_product():
 
 
 @bp.put("/products/<int:product_id>")
-@write_required
+@login_required
 def update_product_price(product_id):
     data = request.get_json(silent=True) or {}
     field = data.get("field")
@@ -195,7 +184,7 @@ def update_product_price(product_id):
     # field name is validated against a fixed allow-list above, so it's
     # safe to interpolate directly into the column position here.
     with db_cursor(commit=True) as cur:
-        cur.execute("SELECT * FROM products WHERE id = %s AND user_id = %s", (product_id, g.user_id))
+        cur.execute("SELECT * FROM products WHERE id = %s", (product_id,))
         row = cur.fetchone()
         if not row:
             return jsonify({"error": "Product not found"}), 404
@@ -205,7 +194,7 @@ def update_product_price(product_id):
 
 
 @bp.delete("/products/<int:product_id>")
-@admin_required
+@login_required
 def delete_product(product_id):
     with db_cursor(commit=True) as cur:
         cur.execute("SELECT id FROM products WHERE id = %s", (product_id,))
@@ -224,10 +213,7 @@ def delete_product(product_id):
 @login_required
 def list_credit_sales():
     with db_cursor() as cur:
-        if g.role == "admin":
-            cur.execute("SELECT * FROM credit_sales ORDER BY id DESC")
-        else:
-            cur.execute("SELECT * FROM credit_sales WHERE user_id = %s ORDER BY id DESC", (g.user_id,))
+        cur.execute("SELECT * FROM credit_sales ORDER BY id DESC")
         sales = rows_to_list(cur.fetchall())
 
         for sale in sales:
@@ -241,7 +227,7 @@ def list_credit_sales():
 
 
 @bp.post("/credit-sales")
-@write_required
+@login_required
 def create_credit_sale():
     data = request.get_json(silent=True) or {}
     customer = (data.get("customer") or "").strip()
@@ -267,7 +253,7 @@ def create_credit_sale():
 
 
 @bp.post("/credit-sales/<int:credit_sale_id>/payments")
-@write_required
+@login_required
 def add_credit_payment(credit_sale_id):
     data = request.get_json(silent=True) or {}
     amount = _num(data, "amount")
@@ -278,10 +264,7 @@ def add_credit_payment(credit_sale_id):
         return jsonify({"error": "Payment amount must be greater than zero"}), 400
 
     with db_cursor(commit=True) as cur:
-        cur.execute(
-            "SELECT * FROM credit_sales WHERE id = %s AND user_id = %s",
-            (credit_sale_id, g.user_id),
-        )
+        cur.execute("SELECT * FROM credit_sales WHERE id = %s", (credit_sale_id,))
         sale = cur.fetchone()
         if not sale:
             return jsonify({"error": "Credit sale not found"}), 404
@@ -308,7 +291,7 @@ def add_credit_payment(credit_sale_id):
 
 
 @bp.delete("/credit-sales/<int:credit_sale_id>")
-@admin_required
+@login_required
 def delete_credit_sale(credit_sale_id):
     with db_cursor(commit=True) as cur:
         cur.execute("SELECT id FROM credit_sales WHERE id = %s", (credit_sale_id,))
