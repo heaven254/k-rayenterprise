@@ -31,7 +31,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 def issue_token(user_id: int, email: str, role: str) -> str:
     payload = {
-        "sub": user_id,
+        "sub": str(user_id),
         "email": email,
         "role": role,
         "iat": datetime.datetime.utcnow(),
@@ -65,7 +65,7 @@ def login_required(fn):
         except jwt.InvalidTokenError:
             return jsonify({"error": "Invalid session token"}), 401
 
-        g.user_id = payload["sub"]
+        g.user_id = int(payload["sub"])
         g.email = payload["email"]
         g.role = payload["role"]
         return fn(*args, **kwargs)
@@ -86,7 +86,7 @@ def write_required(fn):
         except jwt.InvalidTokenError:
             return jsonify({"error": "Invalid session token"}), 401
 
-        g.user_id = payload["sub"]
+        g.user_id = int(payload["sub"])
         g.email = payload["email"]
         g.role = payload["role"]
 
@@ -113,7 +113,7 @@ def admin_required(fn):
         except jwt.InvalidTokenError:
             return jsonify({"error": "Invalid session token"}), 401
 
-        g.user_id = payload["sub"]
+        g.user_id = int(payload["sub"])
         g.email = payload["email"]
         g.role = payload["role"]
 
