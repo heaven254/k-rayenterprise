@@ -644,6 +644,7 @@
   }
   .sheet td.line-label{padding:10px 12px;font-size:13.8px;}
   .sheet td.line-val{padding:10px 12px;text-align:right;font-family:var(--mono);font-size:14px;}
+  .sheet td.line-val.red{color:var(--red);}
   .sheet tr.total-row td{
     border-top:1px solid var(--line);
     font-weight:700;padding-top:14px;
@@ -2090,7 +2091,25 @@
       <div class="two-col">
         <div class="card">
           <div class="card-head">
-            <div><h3>Profit Spreadsheet</h3><div class="sub">Revenue, cost of goods, expenses and net profit</div></div>
+            <div><h3>Profit Spreadsheet</h3><div class="sub" id="pf-period-label">Revenue, cost of goods, expenses and net profit — All-Time</div></div>
+          </div>
+          <div class="inline-form" style="margin-bottom:18px;">
+            <div class="field small">
+              <label>View By</label>
+              <select id="pf-period-type" onchange="onProfitPeriodTypeChange()">
+                <option value="all">All-Time</option>
+                <option value="month">Month</option>
+                <option value="week">Week</option>
+              </select>
+            </div>
+            <div class="field hidden" id="pf-month-field">
+              <label>Month</label>
+              <input type="month" id="pf-month-picker" onchange="renderProfitSpreadsheet()">
+            </div>
+            <div class="field hidden" id="pf-week-field">
+              <label>Week</label>
+              <input type="week" id="pf-week-picker" onchange="renderProfitSpreadsheet()">
+            </div>
           </div>
           <div class="table-container">
             <table class="sheet">
@@ -5295,8 +5314,99 @@
     else rpBody.innerHTML = recentPurchases.map(p => `<tr><td><strong>${p.item}</strong></td><td class="num mono">${p.qty}</td><td class="num mono">${fmt(p.qty*p.cost)}</td></tr>`).join('');
 
     renderOverviewTopBuyers();
+    renderProfitSpreadsheet();
+  }
 
-    // PROFIT SPREADSHEET SHEET
+  // ---------------------------------------------------------------
+  // PROFIT SPREADSHEET — period navigation (All-Time / Month / Week)
+  // ---------------------------------------------------------------
+  function getISOWeekRange(weekStr){
+    // weekStr format from <input type="week">: "2026-W27"
+    const [yearStr, wk] = weekStr.split('-W');
+    const year = Number(yearStr);
+    const week = Number(wk);
+    const jan4 = new Date(Date.UTC(year, 0, 4));
+    const jan4Day = jan4.getUTCDay() || 7; // Monday=1..Sunday=7
+    const week1Monday = new Date(jan4);
+    week1Monday.setUTCDate(jan4.getUTCDate() - jan4Day + 1);
+    const start = new Date(week1Monday);
+    start.setUTCDate(week1Monday.getUTCDate() + (week - 1) * 7);
+    const end = new Date(start);
+    end.setUTCDate(start.getUTCDate() + 6);
+    end.setUTCHours(23, 59, 59, 999);
+    return { start, end };
+  }
+
+  function onProfitPeriodTypeChange(){
+    const type = document.getElementById('pf-period-type').value;
+    const monthField = document.getElementById('pf-month-field');
+    const weekField = document.getElementById('pf-week-field');
+    monthField.classList.toggle('hidden', type !== 'month');
+    weekField.classList.toggle('hidden', type !== 'week');
+
+    if(type === 'month'){
+      const input = document.getElementById('pf-month-picker');
+      if(!input.value) input.value = new Date().toISOString().slice(0,7);
+    } else if(type === 'week'){
+      const input = document.getElementById('pf-week-picker');
+      if(!input.value){
+        const now = new Date();
+        const jan1 = new Date(now.getFullYear(), 0, 1);
+        const dayOfYear = Math.floor((now - jan1) / 86400000) + 1;
+        const isoWeek = Math.ceil((dayOfYear + (jan1.getDay() || 7) - 1) / 7);
+        input.value = `${now.getFullYear()}-W${String(isoWeek).padStart(2,'0')}`;
+      }
+    }
+    renderProfitSpreadsheet();
+  }
+
+  function getProfitPeriodRange(){
+    const type = document.getElementById('pf-period-type').value;
+    if(type === 'month'){
+      const val = document.getElementById('pf-month-picker').value;
+      if(!val) return null;
+      const [y, m] = val.split('-').map(Number);
+      const start = new Date(y, m - 1, 1);
+      const end = new Date(y, m, 0, 23, 59, 59, 999);
+      const label = start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      return { start, end, label };
+    }
+    if(type === 'week'){
+      const val = document.getElementById('pf-week-picker').value;
+      if(!val) return null;
+      const { start, end } = getISOWeekRange(val);
+      const label = `Week of ${start.toLocaleDateString('en-US', { month:'short', day:'numeric' })} – ${end.toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' })}`;
+      return { start, end, label };
+    }
+    return null; // all-time
+  }
+
+  function inRange(dateStr, range){
+    if(!range) return true;
+    const d = new Date(dateStr);
+    return d >= range.start && d <= range.end;
+  }
+
+  function renderProfitSpreadsheet(){
+    const range = getProfitPeriodRange();
+    document.getElementById('pf-period-label').textContent =
+      'Revenue, cost of goods, expenses and net profit — ' + (range ? range.label : 'All-Time');
+
+    const periodSales = state.sales.filter(s => inRange(s.date, range));
+    const periodCreditSales = state.creditSales.filter(c => inRange(c.date, range));
+    const periodPurchases = state.purchases.filter(p => inRange(p.date, range));
+    const periodExpenses = state.expenses.filter(e => inRange(e.date, range));
+    const periodPumice = state.pumice.filter(p => inRange(p.date, range));
+    const periodCash = state.cash.filter(c => inRange(c.date, range));
+
+    const totalGenSales = periodSales.reduce((s, x) => s + (x.qty * x.price), 0);
+    const totalCreditSalesOutstanding = periodCreditSales.reduce((s, c) => s + Number(c.remaining || 0), 0);
+    const totalGenPurchases = periodPurchases.reduce((s, x) => s + (x.qty * x.cost), 0);
+    const totalGenExpenses = periodExpenses.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+    const totalCashInjected = periodCash.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    const netProfit = totalGenSales - totalGenPurchases - totalGenExpenses;
+    const margin = totalGenSales > 0 ? ((netProfit / totalGenSales) * 100).toFixed(1) + '%' : '—';
+
     document.getElementById('pf-revenue').textContent = fmt(totalGenSales);
     document.getElementById('pf-credit-sales').textContent = fmt(totalCreditSalesOutstanding);
     document.getElementById('pf-cogs').textContent = fmt(totalGenPurchases);
@@ -5305,7 +5415,7 @@
 
     // Group expenses by category
     const expCatMap = {};
-    state.expenses.forEach(e => {
+    periodExpenses.forEach(e => {
       const cat = e.category || 'General';
       expCatMap[cat] = (expCatMap[cat] || 0) + Number(e.amount);
     });
@@ -5313,7 +5423,7 @@
     const pfExpBody = document.getElementById('pf-expenses-body');
     const expKeys = Object.keys(expCatMap);
     if(expKeys.length === 0){
-      pfExpBody.innerHTML = '<tr><td class="line-label muted">No expenses logged</td><td class="line-val">KSh 0</td></tr>';
+      pfExpBody.innerHTML = '<tr><td class="line-label muted">No expenses logged' + (range ? ' for this period' : '') + '</td><td class="line-val">KSh 0</td></tr>';
     } else {
       pfExpBody.innerHTML = expKeys.map(cat => `
         <tr><td class="line-label">${cat}</td><td class="line-val red">${fmt(expCatMap[cat])}</td></tr>
@@ -5321,16 +5431,21 @@
     }
 
     document.getElementById('pf-expenses-total').textContent = fmt(totalGenExpenses);
-    document.getElementById('pf-net').textContent = fmt(netProfit);
+    const netEl = document.getElementById('pf-net');
+    netEl.textContent = fmt(netProfit);
+    netEl.classList.toggle('red', netProfit < 0);
     document.getElementById('pf-margin').textContent = margin;
 
-    // Pumice Net
+    // Pumice Net (period-scoped)
     let pumiceNet = 0;
-    state.pumice.forEach(p => {
+    periodPumice.forEach(p => {
       if(p.type === 'sale') pumiceNet += p.amount;
       else pumiceNet -= p.amount;
     });
-    document.getElementById('pf-pumice-net').textContent = fmt(pumiceNet);
+    const pumiceEl = document.getElementById('pf-pumice-net');
+    pumiceEl.textContent = fmt(pumiceNet);
+    pumiceEl.classList.toggle('red', pumiceNet < 0);
+
     document.getElementById('pf-cash').textContent = fmt(totalCashInjected);
   }
 
