@@ -1475,7 +1475,7 @@
           <form class="inline-form" onsubmit="addPumiceSale(event)">
             <div class="field"><label>Customer</label><input type="text" id="pm-s-customer" placeholder="Buyer name" required></div>
             <div class="field small"><label>Date</label><input type="date" id="pm-s-date" required></div>
-            <div class="field small"><label>Qty (units/bags)</label><input type="number" id="pm-s-qty" min="1" value="1" required></div>
+            <div class="field small"><label>Qty (units/bags)</label><input type="number" id="pm-s-qty" min="0.01" step="0.01" value="1" required></div>
             <div class="field small"><label>Unit Price</label><input type="number" id="pm-s-price" min="0" step="0.01" required></div>
             <button type="submit" class="btn btn-primary" style="height:41px; margin-top: auto;">+ Add Pumice Sale</button>
           </form>
@@ -1494,7 +1494,7 @@
             </div>
             <div class="field"><label>Description / Vendor</label><input type="text" id="pm-c-desc" placeholder="e.g. Quarry batch / Freight" required></div>
             <div class="field small"><label>Date</label><input type="date" id="pm-c-date" required></div>
-            <div class="field small"><label>Qty</label><input type="number" id="pm-c-qty" min="1" value="1"></div>
+            <div class="field small"><label>Qty</label><input type="number" id="pm-c-qty" min="0.01" step="0.01" value="1"></div>
             <div class="field small"><label>Amount (KSh)</label><input type="number" id="pm-c-amount" min="0" step="0.01" required></div>
             <button type="submit" class="btn btn-secondary" style="height:41px; margin-top: auto;">+ Log Pumice Cost</button>
           </form>
@@ -1522,6 +1522,7 @@
         <button class="stats-tab-btn" id="st-tab-monthly" onclick="setStatsPeriod('monthly')">Monthly</button>
         <button class="stats-tab-btn" id="st-tab-yearly" onclick="setStatsPeriod('yearly')">Yearly</button>
       </div>
+      <div class="sub" style="margin:-6px 0 14px;">Quick snapshot below (relative to today). The tables further down use the month picker instead — pick any month to browse its own numbers.</div>
 
       <div class="stat-grid">
         <div class="panel stat-card">
@@ -1564,7 +1565,7 @@
             </div>
             <div class="field"><label>Product Name</label><input type="text" id="hist-item" placeholder="e.g. Rice 25kg" required></div>
             <div class="field small"><label>Date</label><input type="date" id="hist-date" required></div>
-            <div class="field small"><label>Qty</label><input type="number" id="hist-qty" min="1" value="1" required></div>
+            <div class="field small"><label>Qty</label><input type="number" id="hist-qty" min="0.01" step="0.01" value="1" required></div>
             <div class="field small"><label>Unit Amount (KSh)</label><input type="number" id="hist-price" min="0" step="0.01" required></div>
             <button type="submit" class="btn btn-secondary" style="height:41px; margin-top: auto;">+ Add Historical Entry</button>
           </form>
@@ -1591,7 +1592,7 @@
       <div class="two-col">
         <div class="card">
           <div class="card-head">
-            <div><h3>Top Selling Items</h3><div class="sub">By total revenue for period</div></div>
+            <div><h3>Top Selling Items</h3><div class="sub" id="st-top-sales-sub">By total revenue for period</div></div>
           </div>
           <div class="table-container">
             <table>
@@ -1603,7 +1604,7 @@
 
         <div class="card">
           <div class="card-head">
-            <div><h3>Top Purchases</h3><div class="sub">By total spend for period</div></div>
+            <div><h3>Top Purchases</h3><div class="sub" id="st-top-purchases-sub">By total spend for period</div></div>
           </div>
           <div class="table-container">
             <table>
@@ -1617,7 +1618,7 @@
       <!-- PRODUCT MOVEMENT -->
       <div class="card">
         <div class="card-head">
-          <div><h3>Product Movement</h3><div class="sub" id="st-movement-sub">Products moving from highest to lowest quantity sold — Weekly</div></div>
+          <div><h3>Product Movement</h3><div class="sub" id="st-movement-sub">Products moving from highest to lowest quantity sold</div></div>
         </div>
         <div class="table-container">
           <table>
@@ -1650,7 +1651,7 @@
             <input type="text" id="p-item" list="p-item-datalist" required autocomplete="off" placeholder="Type to search or add a product…" oninput="handlePurchaseItemSelect()">
             <datalist id="p-item-datalist"></datalist>
           </div>
-          <div class="field small"><label>Qty</label><input type="number" id="p-qty" min="1" value="1" required></div>
+          <div class="field small"><label>Qty</label><input type="number" id="p-qty" min="0.01" step="0.01" value="1" required></div>
           <div class="field small"><label>Unit Cost</label><input type="number" id="p-cost" min="0" step="0.01" required></div>
           <div class="field"><label>Category</label><input type="text" id="p-category" placeholder="e.g. Small Osale"></div>
           <button type="submit" class="btn btn-secondary">+ Add Item to Receipt</button>
@@ -1741,7 +1742,7 @@
             <input type="text" id="s-item" list="s-item-datalist" required autocomplete="off" placeholder="Type to search or add a product…" oninput="handleSaleItemSelect()">
             <datalist id="s-item-datalist"></datalist>
           </div>
-          <div class="field small"><label>Qty</label><input type="number" id="s-qty" min="1" step="1" value="1" required></div>
+          <div class="field small"><label>Qty</label><input type="number" id="s-qty" min="0.01" step="0.01" value="1" required></div>
           <div class="field small"><label>Unit Price</label><input type="number" id="s-price" min="0" step="0.01" required></div>
           <button type="submit" class="btn btn-secondary">+ Add Item to Receipt</button>
         </form>
@@ -1840,7 +1841,7 @@
             <input type="text" id="cr-item" list="cr-item-datalist" required autocomplete="off" placeholder="Type to search or add a product…" oninput="handleCreditItemSelect()">
             <datalist id="cr-item-datalist"></datalist>
           </div>
-          <div class="field small"><label>Qty</label><input type="number" id="cr-qty" min="1" step="1" value="1" required></div>
+          <div class="field small"><label>Qty</label><input type="number" id="cr-qty" min="0.01" step="0.01" value="1" required></div>
           <div class="field small"><label>Unit Price</label><input type="number" id="cr-price" min="0" step="0.01" required></div>
           <button type="submit" class="btn btn-primary">+ Issue Credit Sale</button>
         </form>
@@ -1934,7 +1935,7 @@
             </select>
           </div>
           <div class="field"><label>Item Name</label><input type="text" id="inv-item-name" placeholder="e.g. HDPE Crushed Pellets" required></div>
-          <div class="field small"><label>Quantity</label><input type="number" id="inv-item-qty" min="1" value="1" required></div>
+          <div class="field small"><label>Quantity</label><input type="number" id="inv-item-qty" min="0.01" step="0.01" value="1" required></div>
           <div class="field small"><label>Unit Cost (KSh)</label><input type="number" id="inv-item-cost" min="0" step="0.01" placeholder="0.00"></div>
           <div class="field"><label>Comment / Reason (Optional)</label><input type="text" id="inv-item-comment" placeholder="e.g. Damaged stock, supplier sample..."></div>
           <button type="submit" id="inv-submit-btn" class="btn btn-primary">+ Add Stock</button>
@@ -2028,6 +2029,10 @@
             <input type="text" id="e-search-query" placeholder="Type name or category..." oninput="renderExpenses()">
           </div>
           <div class="field small">
+            <label>Quick Month</label>
+            <input type="month" id="e-filter-month" onchange="applyExpenseMonthFilter()">
+          </div>
+          <div class="field small">
             <label>From Date</label>
             <input type="date" id="e-filter-from" onchange="renderExpenses()">
           </div>
@@ -2037,6 +2042,7 @@
           </div>
           <button class="btn btn-secondary btn-small" onclick="resetExpenseFilters()" style="height:41px;">Reset Filters</button>
         </div>
+        <div class="sub" id="expenses-live-summary" style="margin:-8px 0 14px;"></div>
 
         <div class="table-container">
           <table>
@@ -4964,8 +4970,26 @@
 
   function resetExpenseFilters(){
     document.getElementById('e-search-query').value = '';
+    document.getElementById('e-filter-month').value = '';
     document.getElementById('e-filter-from').value = '';
     document.getElementById('e-filter-to').value = '';
+    renderExpenses();
+  }
+
+  function applyExpenseMonthFilter(){
+    const val = document.getElementById('e-filter-month').value;
+    if(!val){
+      document.getElementById('e-filter-from').value = '';
+      document.getElementById('e-filter-to').value = '';
+      renderExpenses();
+      return;
+    }
+    const [y, m] = val.split('-').map(Number);
+    const firstDay = new Date(y, m - 1, 1);
+    const lastDay = new Date(y, m, 0);
+    const toISO = (d) => d.toISOString().slice(0, 10);
+    document.getElementById('e-filter-from').value = toISO(firstDay);
+    document.getElementById('e-filter-to').value = toISO(lastDay);
     renderExpenses();
   }
 
@@ -5005,6 +5029,15 @@
 
     const filteredTotal = filtered.reduce((s, x) => s + Number(x.amount), 0);
     document.getElementById('expenses-filtered-total').textContent = fmt(filteredTotal);
+
+    const liveSummary = document.getElementById('expenses-live-summary');
+    if (liveSummary) {
+      if (q || from || to) {
+        liveSummary.textContent = `${filtered.length} matching expense${filtered.length !== 1 ? 's' : ''} — totaling ${fmt(filteredTotal)}`;
+      } else {
+        liveSummary.textContent = `${filtered.length} expense${filtered.length !== 1 ? 's' : ''} total`;
+      }
+    }
 
     const body = document.getElementById('expenses-body');
     if(filtered.length === 0){
@@ -5185,7 +5218,7 @@
     });
   }
 
-  function addHistoricalData(e) {
+  async function addHistoricalData(e) {
     e.preventDefault();
     const type = document.getElementById('hist-type').value;
     const item = document.getElementById('hist-item').value.trim();
@@ -5195,14 +5228,43 @@
 
     if (!item || !date || price <= 0) return;
 
-    if (!state.products.some(p => p.name.toLowerCase() === item.toLowerCase())) {
-      state.products.push({ id: nextId(), name: item, category: 'General', cost: type === 'purchase' ? price : 0, price: type === 'sale' ? price : 0 });
-    }
+    if (isServerMode()) {
+      try {
+        if (!state.products.some(p => p.name.toLowerCase() === item.toLowerCase())) {
+          const createdProduct = await apiRequest('/api/products', {
+            method: 'POST',
+            body: JSON.stringify({ name: item, category: 'General', cost: type === 'purchase' ? price : 0, price: type === 'sale' ? price : 0 })
+          });
+          state.products.push({ id: createdProduct.id, name: createdProduct.name, category: createdProduct.category, cost: createdProduct.cost, price: createdProduct.price });
+        }
 
-    if (type === 'sale') {
-      state.sales.unshift({ id: nextId(), date, item, customer: 'Historical Entry', account: 'cash', qty, price });
+        if (type === 'sale') {
+          const created = await apiRequest('/api/sales', {
+            method: 'POST',
+            body: JSON.stringify({ date, item, customer: 'Historical Entry', account: 'cash', qty, price })
+          });
+          state.sales.unshift({ id: created.id, receiptId: created.receipt_id, date: created.date, item: created.item, customer: created.customer, account: created.account, qty: created.qty, price: created.price });
+        } else {
+          const created = await apiRequest('/api/purchases', {
+            method: 'POST',
+            body: JSON.stringify({ date, item, supplier: 'Historical Supplier', account: 'cash', category: 'General', qty, cost: price })
+          });
+          state.purchases.unshift({ id: created.id, receiptId: created.receipt_id, date: created.date, item: created.item, supplier: created.supplier, account: created.account, category: created.category, qty: created.qty, cost: created.cost });
+        }
+      } catch (err) {
+        alert('Could not save to server: ' + (err.message || 'unknown error'));
+        return;
+      }
     } else {
-      state.purchases.unshift({ id: nextId(), date, item, supplier: 'Historical Supplier', account: 'cash', category: 'General', qty, cost: price });
+      if (!state.products.some(p => p.name.toLowerCase() === item.toLowerCase())) {
+        state.products.push({ id: nextId(), name: item, category: 'General', cost: type === 'purchase' ? price : 0, price: type === 'sale' ? price : 0 });
+      }
+
+      if (type === 'sale') {
+        state.sales.unshift({ id: nextId(), date, item, customer: 'Historical Entry', account: 'cash', qty, price });
+      } else {
+        state.purchases.unshift({ id: nextId(), date, item, supplier: 'Historical Supplier', account: 'cash', category: 'General', qty, cost: price });
+      }
     }
 
     saveStateToStorage();
@@ -5258,6 +5320,83 @@
       prodStats[p.item].purchases += (p.qty * p.cost);
     });
 
+    const monthLabel = new Date(selYear, selMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+
+    // Top Selling Items — same selected month as the table below
+    const salesByItem = {};
+    monthlySales.forEach(s => {
+      if(!salesByItem[s.item]) salesByItem[s.item] = { qty: 0, total: 0 };
+      salesByItem[s.item].qty += Number(s.qty);
+      salesByItem[s.item].total += (s.qty * s.price);
+    });
+    monthlyCreditSales.forEach(c => {
+      if(!salesByItem[c.item]) salesByItem[c.item] = { qty: 0, total: 0 };
+      salesByItem[c.item].qty += Number(c.qty);
+      salesByItem[c.item].total += Number(c.total || 0);
+    });
+
+    const topSalesSub = document.getElementById('st-top-sales-sub');
+    if (topSalesSub) topSalesSub.textContent = `By total revenue — ${monthLabel}`;
+    const topSales = Object.keys(salesByItem).map(k => ({ item: k, ...salesByItem[k] })).sort((a,b) => b.total - a.total);
+    const topSalesBody = document.getElementById('st-top-sales');
+    if(topSalesBody){
+      if(topSales.length === 0){
+        topSalesBody.innerHTML = `<tr class="empty-row"><td colspan="3">No sales in ${monthLabel}.</td></tr>`;
+      } else {
+        topSalesBody.innerHTML = topSales.slice(0, 5).map(x => `
+          <tr><td><strong>${x.item}</strong></td><td class="num mono">${x.qty}</td><td class="num mono green">${fmt(x.total)}</td></tr>
+        `).join('');
+      }
+    }
+
+    // Top Purchases — same selected month
+    const purchasesByItem = {};
+    monthlyPurchases.forEach(p => {
+      if(!purchasesByItem[p.item]) purchasesByItem[p.item] = { qty: 0, total: 0 };
+      purchasesByItem[p.item].qty += Number(p.qty);
+      purchasesByItem[p.item].total += (p.qty * p.cost);
+    });
+
+    const topPurchasesSub = document.getElementById('st-top-purchases-sub');
+    if (topPurchasesSub) topPurchasesSub.textContent = `By total spend — ${monthLabel}`;
+    const topPurchases = Object.keys(purchasesByItem).map(k => ({ item: k, ...purchasesByItem[k] })).sort((a,b) => b.total - a.total);
+    const topPurchasesBody = document.getElementById('st-top-purchases');
+    if(topPurchasesBody){
+      if(topPurchases.length === 0){
+        topPurchasesBody.innerHTML = `<tr class="empty-row"><td colspan="3">No purchases in ${monthLabel}.</td></tr>`;
+      } else {
+        topPurchasesBody.innerHTML = topPurchases.slice(0, 5).map(x => `
+          <tr><td><strong>${x.item}</strong></td><td class="num mono">${x.qty}</td><td class="num mono">${fmt(x.total)}</td></tr>
+        `).join('');
+      }
+    }
+
+    // Product Movement — same selected month
+    const movementSub = document.getElementById('st-movement-sub');
+    if (movementSub) movementSub.textContent = `Products moving from highest to lowest quantity sold — ${monthLabel}`;
+    const movementList = Object.keys(salesByItem).map(k => ({ item: k, qty: salesByItem[k].qty })).sort((a,b) => b.qty - a.qty);
+    const movementBody = document.getElementById('st-product-movement');
+    if(movementBody){
+      if(movementList.length === 0){
+        movementBody.innerHTML = `<tr class="empty-row"><td colspan="4">No sales in ${monthLabel}.</td></tr>`;
+      } else {
+        const maxQty = movementList[0].qty || 1;
+        movementBody.innerHTML = movementList.map((x, idx) => {
+          const perc = Math.min(100, Math.round((x.qty / maxQty) * 100));
+          return `<tr>
+            <td class="mono" style="color:var(--text-dim);">${idx + 1}</td>
+            <td><strong>${x.item}</strong></td>
+            <td class="num mono">${x.qty} units</td>
+            <td>
+              <div style="background:var(--panel-alt); border-radius:4px; height:8px; width:100%; overflow:hidden;">
+                <div style="background:var(--cyan); height:100%; width:${perc}%;"></div>
+              </div>
+            </td>
+          </tr>`;
+        }).join('');
+      }
+    }
+
     const body = document.getElementById('st-monthly-products-body');
     const keys = Object.keys(prodStats).filter(k => prodStats[k].sales > 0 || prodStats[k].purchases > 0);
 
@@ -5308,71 +5447,6 @@
 
     document.getElementById('st-net-profit').textContent = fmt(estProfit);
     document.getElementById('st-margin-perc').textContent = `${margin} Margin`;
-
-    document.getElementById('st-movement-sub').textContent = `Products moving from highest to lowest quantity sold — ${pLabel}`;
-
-    // Top Selling Items
-    const salesByItem = {};
-    sales.forEach(s => {
-      if(!salesByItem[s.item]) salesByItem[s.item] = { qty: 0, total: 0 };
-      salesByItem[s.item].qty += Number(s.qty);
-      salesByItem[s.item].total += (s.qty * s.price);
-    });
-    creditSales.forEach(c => {
-      if(!salesByItem[c.item]) salesByItem[c.item] = { qty: 0, total: 0 };
-      salesByItem[c.item].qty += Number(c.qty);
-      salesByItem[c.item].total += Number(c.total || 0);
-    });
-
-    const topSales = Object.keys(salesByItem).map(k => ({ item: k, ...salesByItem[k] })).sort((a,b) => b.total - a.total);
-    const topSalesBody = document.getElementById('st-top-sales');
-    if(topSales.length === 0){
-      topSalesBody.innerHTML = '<tr class="empty-row"><td colspan="3">No sales in this period.</td></tr>';
-    } else {
-      topSalesBody.innerHTML = topSales.slice(0, 5).map(x => `
-        <tr><td><strong>${x.item}</strong></td><td class="num mono">${x.qty}</td><td class="num mono green">${fmt(x.total)}</td></tr>
-      `).join('');
-    }
-
-    // Top Purchases
-    const purchasesByItem = {};
-    purchases.forEach(p => {
-      if(!purchasesByItem[p.item]) purchasesByItem[p.item] = { qty: 0, total: 0 };
-      purchasesByItem[p.item].qty += Number(p.qty);
-      purchasesByItem[p.item].total += (p.qty * p.cost);
-    });
-
-    const topPurchases = Object.keys(purchasesByItem).map(k => ({ item: k, ...purchasesByItem[k] })).sort((a,b) => b.total - a.total);
-    const topPurchasesBody = document.getElementById('st-top-purchases');
-    if(topPurchases.length === 0){
-      topPurchasesBody.innerHTML = '<tr class="empty-row"><td colspan="3">No purchases in this period.</td></tr>';
-    } else {
-      topPurchasesBody.innerHTML = topPurchases.slice(0, 5).map(x => `
-        <tr><td><strong>${x.item}</strong></td><td class="num mono">${x.qty}</td><td class="num mono">${fmt(x.total)}</td></tr>
-      `).join('');
-    }
-
-    // Product Movement (Ranked by Qty)
-    const movementList = Object.keys(salesByItem).map(k => ({ item: k, qty: salesByItem[k].qty })).sort((a,b) => b.qty - a.qty);
-    const movementBody = document.getElementById('st-product-movement');
-    if(movementList.length === 0){
-      movementBody.innerHTML = '<tr class="empty-row"><td colspan="4">No sales in this period.</td></tr>';
-    } else {
-      const maxQty = movementList[0].qty || 1;
-      movementBody.innerHTML = movementList.map((x, idx) => {
-        const perc = Math.min(100, Math.round((x.qty / maxQty) * 100));
-        return `<tr>
-          <td class="mono" style="color:var(--text-dim);">${idx + 1}</td>
-          <td><strong>${x.item}</strong></td>
-          <td class="num mono">${x.qty} units</td>
-          <td>
-            <div style="background:var(--panel-alt); border-radius:4px; height:8px; width:100%; overflow:hidden;">
-              <div style="background:var(--cyan); height:100%; width:${perc}%;"></div>
-            </div>
-          </td>
-        </tr>`;
-      }).join('');
-    }
 
     renderMonthlyProductStats();
   }
