@@ -148,4 +148,65 @@ expect(code == 201 and body["type"] == "purchase", "pumice accepts 'purchase' ty
 code, body = call("post", "/api/stock-logs", token=amina_token, json={"date": "2026-08-07", "type": "add", "item": "Rice 25kg", "qty": 20, "cost": 2000, "comment": "Restock"})
 expect(code == 201 and body["item"] == "Rice 25kg", "stock-logs use item name directly")
 
+# 16. Editing (PUT) on a generic resource
+code, body = call("post", "/api/expenses", token=amina_token, json={"date": "2026-08-07", "name": "Fuel", "category": "Transport", "amount": 800, "account": "cash"})
+expense_id = body["id"]
+code, body = call("put", f"/api/expenses/{expense_id}", token=john_token, json={"amount": 950})
+expect(code == 200 and body["amount"] == 950, f"any teammate can edit an expense (got {code}: {body})")
+
+code, body = call("put", f"/api/expenses/{expense_id}", token=john_token, json={})
+expect(code == 400, "editing with no fields is rejected")
+
+code, body = call("put", "/api/expenses/999999", token=john_token, json={"amount": 1})
+expect(code == 404, "editing a non-existent record 404s")
+
+# 17. Product edit now supports name/category, not just price/cost
+code, body = call("post", "/api/products", token=amina_token, json={"name": "Beans 2kg", "category": "Legumes", "cost": 300, "price": 400})
+prod2_id = body["id"]
+code, body = call("put", f"/api/products/{prod2_id}", token=john_token, json={"name": "Beans 2kg (Local)", "category": "Grains"})
+expect(code == 200 and body["name"] == "Beans 2kg (Local)" and body["category"] == "Grains",
+       f"product name/category are editable, not just price (got {code}: {body})")
+
+# 18. Activity log records create/update/delete
+code, body = call("get", "/api/activity", token=amina_token)
+expect(code == 200 and len(body) > 0, "activity log returns entries")
+expect(any(a["resource_type"] == "expenses" and a["action"] == "updated" for a in body),
+       "activity log recorded the expense edit")
+expect(any(a["resource_type"] == "products" and a["action"] == "created" for a in body),
+       "activity log recorded product creation")
+expect(any(a["user_name"] in ("Amina Traders", "John (Staff)") for a in body),
+       "activity log entries are attributed to the acting user")
+
+# 19. Rate limiting kicks in after repeated failed logins
+for _ in range(6):
+    call("post", "/api/auth/login", json={"email": "amina@example.com", "password": "wrong-password"})
+code, body = call("post", "/api/auth/login", json={"email": "amina@example.com", "password": "wrong-password"})
+expect(code == 429, f"rate limiting blocks after repeated failed attempts (got {code}: {body})")
+
+# 20. Real password reset flow
+code, body = call("post", "/api/auth/forgot-password", json={"email": "john@example.com"})
+expect(code == 200 and body.get("requires_verification") is True, f"forgot-password issues a code (got {code}: {body})")
+reset_verification_id = body["verification_id"]
+reset_code = body["demo_code"]
+
+code, body = call("post", "/api/auth/reset-password", json={
+    "verification_id": reset_verification_id, "code": "000000", "new_password": "newpass123"
+})
+expect(code == 401, "wrong reset code rejected")
+
+code, body = call("post", "/api/auth/reset-password", json={
+    "verification_id": reset_verification_id, "code": reset_code, "new_password": "newpass123"
+})
+expect(code == 200 and "token" in body, f"correct reset code changes password + logs in (got {code}: {body})")
+
+code, body = call("post", "/api/auth/login", json={"email": "john@example.com", "password": "newpass123"})
+expect(code == 200 and "token" in body, "can log in with the NEW password after reset")
+
+code, body = call("post", "/api/auth/login", json={"email": "john@example.com", "password": "pw123456"})
+expect(code == 401, "OLD password no longer works after reset")
+
+# 21. forgot-password on a non-existent email doesn't leak account existence
+code, body = call("post", "/api/auth/forgot-password", json={"email": "nobody-here@example.com"})
+expect(code == 200 and "demo_code" not in body, "forgot-password gives the same response for unknown emails (no enumeration)")
+
 print("\nAll checks passed.")

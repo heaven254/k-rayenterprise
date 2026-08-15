@@ -46,7 +46,7 @@ CREATE TABLE IF NOT EXISTS verifications (
     id              SERIAL PRIMARY KEY,
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     code            TEXT NOT NULL,
-    purpose         TEXT NOT NULL CHECK(purpose IN ('signup','admin_login')),
+    purpose         TEXT NOT NULL,
     expires_at      TIMESTAMP NOT NULL,
     used            BOOLEAN NOT NULL DEFAULT FALSE,
     created_at      TIMESTAMP NOT NULL DEFAULT NOW()
@@ -166,6 +166,17 @@ CREATE TABLE IF NOT EXISTS comments (
     text            TEXT NOT NULL,
     date            TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS activity_log (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    user_name       TEXT,
+    action          TEXT NOT NULL,
+    resource_type   TEXT NOT NULL,
+    resource_id     INTEGER,
+    summary         TEXT,
+    created_at      TIMESTAMP NOT NULL DEFAULT NOW()
+);
 """
 
 
@@ -174,6 +185,7 @@ CREATE TABLE IF NOT EXISTS comments (
 # is safe to run repeatedly (IF NOT EXISTS everywhere).
 MIGRATIONS = """
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE verifications DROP CONSTRAINT IF EXISTS verifications_purpose_check;
 """
 
 
@@ -215,3 +227,16 @@ def row_to_dict(row):
 
 def rows_to_list(rows):
     return [dict(r) for r in rows]
+
+
+def log_activity(cur, user_id, user_name, action, resource_type, resource_id, summary):
+    """
+    Records an entry in the shared activity log. Call this inside the
+    same db_cursor(commit=True) block as the change it's describing, so
+    it commits atomically with the change.
+    """
+    cur.execute(
+        """INSERT INTO activity_log (user_id, user_name, action, resource_type, resource_id, summary)
+           VALUES (%s, %s, %s, %s, %s, %s)""",
+        (user_id, user_name, action, resource_type, resource_id, summary),
+    )
