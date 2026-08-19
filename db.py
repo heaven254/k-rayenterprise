@@ -142,7 +142,7 @@ CREATE TABLE IF NOT EXISTS pumice (
     id              SERIAL PRIMARY KEY,
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     date            TEXT NOT NULL,
-    type            TEXT NOT NULL CHECK(type IN ('sale','purchase','expense')),
+    type            TEXT NOT NULL CHECK(type IN ('sale','purchase','expense','withdrawal')),
     item_desc       TEXT,
     qty             DOUBLE PRECISION,
     amount          DOUBLE PRECISION NOT NULL
@@ -186,6 +186,8 @@ CREATE TABLE IF NOT EXISTS activity_log (
 MIGRATIONS = """
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE verifications DROP CONSTRAINT IF EXISTS verifications_purpose_check;
+ALTER TABLE pumice DROP CONSTRAINT IF EXISTS pumice_type_check;
+ALTER TABLE pumice ADD CONSTRAINT pumice_type_check CHECK (type IN ('sale','purchase','expense','withdrawal'));
 """
 
 
