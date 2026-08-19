@@ -1464,6 +1464,11 @@
           <div class="value amber" id="pm-mpesa-cash">KSh 0</div>
           <div class="delta">Singular M-Pesa Liquidity</div>
         </div>
+        <div class="panel stat-card">
+          <div class="label">Total Withdrawn to People</div>
+          <div class="value red" id="pm-total-withdrawn">KSh 0</div>
+          <div class="delta" id="pm-withdrawn-sub">0 withdrawals</div>
+        </div>
       </div>
 
       <!-- Quick Entry Forms for Pumice -->
@@ -1483,33 +1488,146 @@
 
         <div class="card">
           <div class="card-head">
-            <div><h3>Log Pumice Purchase / Expense</h3><div class="sub">Singular costs deducted directly from M-Pesa</div></div>
+            <div><h3>Log Pumice Purchase</h3><div class="sub">Stock purchases deducted directly from M-Pesa</div></div>
           </div>
-          <form class="inline-form" onsubmit="addPumiceCost(event)">
-            <div class="field"><label>Type</label>
-              <select id="pm-c-type" required>
-                <option value="purchase">Stock Purchase</option>
-                <option value="expense">Operating Expense</option>
-              </select>
-            </div>
-            <div class="field"><label>Description / Vendor</label><input type="text" id="pm-c-desc" placeholder="e.g. Quarry batch / Freight" required></div>
-            <div class="field small"><label>Date</label><input type="date" id="pm-c-date" required></div>
-            <div class="field small"><label>Qty</label><input type="number" id="pm-c-qty" min="0.01" step="0.01" value="1"></div>
-            <div class="field small"><label>Amount (KSh)</label><input type="number" id="pm-c-amount" min="0" step="0.01" required></div>
-            <button type="submit" class="btn btn-secondary" style="height:41px; margin-top: auto;">+ Log Pumice Cost</button>
+          <form class="inline-form" onsubmit="addPumicePurchase(event)">
+            <div class="field"><label>Vendor / Description</label><input type="text" id="pm-p-desc" placeholder="e.g. Quarry batch / Freight" required></div>
+            <div class="field small"><label>Date</label><input type="date" id="pm-p-date" required></div>
+            <div class="field small"><label>Qty</label><input type="number" id="pm-p-qty" min="0.01" step="0.01" value="1"></div>
+            <div class="field small"><label>Amount (KSh)</label><input type="number" id="pm-p-amount" min="0" step="0.01" required></div>
+            <button type="submit" class="btn btn-secondary" style="height:41px; margin-top: auto;">+ Log Pumice Purchase</button>
           </form>
         </div>
       </div>
 
-      <!-- Pumice Ledgers -->
+      <div class="two-col">
+        <div class="card">
+          <div class="card-head">
+            <div><h3>Log Pumice Expense</h3><div class="sub">Operating costs deducted directly from M-Pesa</div></div>
+          </div>
+          <form class="inline-form" onsubmit="addPumiceExpense(event)">
+            <div class="field"><label>Description</label><input type="text" id="pm-e-desc" placeholder="e.g. Transport / Labor" required></div>
+            <div class="field small"><label>Date</label><input type="date" id="pm-e-date" required></div>
+            <div class="field small"><label>Qty</label><input type="number" id="pm-e-qty" min="0.01" step="0.01" value="1"></div>
+            <div class="field small"><label>Amount (KSh)</label><input type="number" id="pm-e-amount" min="0" step="0.01" required></div>
+            <button type="submit" class="btn btn-secondary" style="height:41px; margin-top: auto;">+ Log Pumice Expense</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div><h3>Withdraw to Person</h3><div class="sub">Cash sent out of M-Pesa directly to someone (e.g. owner draw, employee payout)</div></div>
+          </div>
+          <form class="inline-form" onsubmit="addPumiceWithdrawal(event)">
+            <div class="field"><label>Recipient Name</label><input type="text" id="pm-w-recipient" placeholder="e.g. Chege" required></div>
+            <div class="field small"><label>Date</label><input type="date" id="pm-w-date" required></div>
+            <div class="field small"><label>Amount (KSh)</label><input type="number" id="pm-w-amount" min="0" step="0.01" required></div>
+            <button type="submit" class="btn btn-secondary" style="height:41px; margin-top: auto;">+ Log Withdrawal</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Pumice Ledgers — separated by type -->
       <div class="card">
         <div class="card-head">
-          <div><h3>Singular Pumice Transaction Ledger</h3><div class="sub">Isolated sales, purchases, and operating costs for Pumice</div></div>
+          <div><h3>Pumice Sales Ledger</h3><div class="sub">Revenue from Pumice sales</div></div>
+          <button class="btn btn-secondary btn-small" onclick="exportPumiceSalesCSV()">⬇ CSV</button>
+        </div>
+        <div class="search-filter-bar">
+          <div class="field">
+            <label>Search Customer</label>
+            <input type="text" id="pm-s-search-query" placeholder="Type customer name..." oninput="renderPumice()">
+          </div>
+          <div class="field small">
+            <label>From Date</label>
+            <input type="date" id="pm-s-filter-from" onchange="renderPumice()">
+          </div>
+          <div class="field small">
+            <label>To Date</label>
+            <input type="date" id="pm-s-filter-to" onchange="renderPumice()">
+          </div>
+          <button class="btn btn-secondary btn-small" onclick="resetPumiceSalesFilters()" style="height:41px;">Reset Filters</button>
         </div>
         <div class="table-container">
           <table>
-            <thead><tr><th>Date</th><th>Type</th><th>Description / Party</th><th class="num">Qty</th><th class="num">Amount (KSh)</th><th style="text-align:center;">Action</th></tr></thead>
-            <tbody id="pm-ledger-body"><tr class="empty-row"><td colspan="6">No Pumice transactions logged yet.</td></tr></tbody>
+            <thead><tr><th>Date</th><th>Customer</th><th class="num">Qty</th><th class="num">Amount (KSh)</th><th style="text-align:center;">Action</th></tr></thead>
+            <tbody id="pm-sales-ledger-body"><tr class="empty-row"><td colspan="5">No Pumice sales logged yet.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div><h3>Pumice Purchases Ledger</h3><div class="sub">Stock purchases for Pumice</div></div>
+          <button class="btn btn-secondary btn-small" onclick="exportPumicePurchasesCSV()">⬇ CSV</button>
+        </div>
+        <div class="search-filter-bar">
+          <div class="field">
+            <label>Search Vendor / Description</label>
+            <input type="text" id="pm-p-search-query" placeholder="Type vendor or description..." oninput="renderPumice()">
+          </div>
+          <div class="field small">
+            <label>From Date</label>
+            <input type="date" id="pm-p-filter-from" onchange="renderPumice()">
+          </div>
+          <div class="field small">
+            <label>To Date</label>
+            <input type="date" id="pm-p-filter-to" onchange="renderPumice()">
+          </div>
+          <button class="btn btn-secondary btn-small" onclick="resetPumicePurchasesFilters()" style="height:41px;">Reset Filters</button>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead><tr><th>Date</th><th>Vendor / Description</th><th class="num">Qty</th><th class="num">Amount (KSh)</th><th style="text-align:center;">Action</th></tr></thead>
+            <tbody id="pm-purchases-ledger-body"><tr class="empty-row"><td colspan="5">No Pumice purchases logged yet.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div><h3>Pumice Expenses Ledger</h3><div class="sub">Operating expenses for Pumice</div></div>
+          <button class="btn btn-secondary btn-small" onclick="exportPumiceExpensesCSV()">⬇ CSV</button>
+        </div>
+        <div class="search-filter-bar">
+          <div class="field">
+            <label>Search Description</label>
+            <input type="text" id="pm-e-search-query" placeholder="Type description..." oninput="renderPumice()">
+          </div>
+          <div class="field small">
+            <label>From Date</label>
+            <input type="date" id="pm-e-filter-from" onchange="renderPumice()">
+          </div>
+          <div class="field small">
+            <label>To Date</label>
+            <input type="date" id="pm-e-filter-to" onchange="renderPumice()">
+          </div>
+          <button class="btn btn-secondary btn-small" onclick="resetPumiceExpensesFilters()" style="height:41px;">Reset Filters</button>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead><tr><th>Date</th><th>Description</th><th class="num">Qty</th><th class="num">Amount (KSh)</th><th style="text-align:center;">Action</th></tr></thead>
+            <tbody id="pm-expenses-ledger-body"><tr class="empty-row"><td colspan="5">No Pumice expenses logged yet.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div><h3>Withdrawals to People</h3><div class="sub">Search by recipient to see their full withdrawal history and running total</div></div>
+        </div>
+        <div class="search-filter-bar">
+          <div class="field">
+            <label>Search Recipient</label>
+            <input type="text" id="pm-w-search" placeholder="e.g. Chege" oninput="renderPumiceWithdrawals()">
+          </div>
+          <button class="btn btn-secondary btn-small" onclick="document.getElementById('pm-w-search').value=''; renderPumiceWithdrawals();" style="height:41px;">Clear</button>
+        </div>
+        <div class="sub" id="pm-w-summary" style="margin:-8px 0 14px;"></div>
+        <div class="table-container">
+          <table>
+            <thead><tr><th>Date</th><th>Recipient</th><th class="num">Amount (KSh)</th><th style="text-align:center;">Action</th></tr></thead>
+            <tbody id="pm-withdrawals-ledger-body"><tr class="empty-row"><td colspan="4">No withdrawals logged yet.</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1522,7 +1640,6 @@
         <button class="stats-tab-btn" id="st-tab-monthly" onclick="setStatsPeriod('monthly')">Monthly</button>
         <button class="stats-tab-btn" id="st-tab-yearly" onclick="setStatsPeriod('yearly')">Yearly</button>
       </div>
-      <div class="sub" style="margin:-6px 0 14px;">Quick snapshot below (relative to today). The tables further down use the month picker instead — pick any month to browse its own numbers.</div>
 
       <div class="stat-grid">
         <div class="panel stat-card">
@@ -1592,7 +1709,7 @@
       <div class="two-col">
         <div class="card">
           <div class="card-head">
-            <div><h3>Top Selling Items</h3><div class="sub" id="st-top-sales-sub">By total revenue for period</div></div>
+            <div><h3>Top Selling Items</h3><div class="sub">By total revenue for period</div></div>
           </div>
           <div class="table-container">
             <table>
@@ -1604,7 +1721,7 @@
 
         <div class="card">
           <div class="card-head">
-            <div><h3>Top Purchases</h3><div class="sub" id="st-top-purchases-sub">By total spend for period</div></div>
+            <div><h3>Top Purchases</h3><div class="sub">By total spend for period</div></div>
           </div>
           <div class="table-container">
             <table>
@@ -1618,7 +1735,7 @@
       <!-- PRODUCT MOVEMENT -->
       <div class="card">
         <div class="card-head">
-          <div><h3>Product Movement</h3><div class="sub" id="st-movement-sub">Products moving from highest to lowest quantity sold</div></div>
+          <div><h3>Product Movement</h3><div class="sub" id="st-movement-sub">Products moving from highest to lowest quantity sold — Weekly</div></div>
         </div>
         <div class="table-container">
           <table>
@@ -1761,6 +1878,19 @@
           </div>
         </div>
 
+      <div class="card">
+        <div class="card-head">
+          <div><h3>Quick Add Product</h3><div class="sub">Register a new sale-able item with its price — e.g. Pumice White, Pumice Black — without leaving Sales</div></div>
+        </div>
+        <form class="inline-form" onsubmit="addProductFromSales(event)">
+          <div class="field"><label>Product Name</label><input type="text" id="sq-prod-name" placeholder="e.g. Pumice White" required></div>
+          <div class="field small"><label>Category</label><input type="text" id="sq-prod-category" placeholder="e.g. Pumice"></div>
+          <div class="field small"><label>Cost Price</label><input type="number" id="sq-prod-cost" min="0" step="0.01" placeholder="0"></div>
+          <div class="field small"><label>Selling Price</label><input type="number" id="sq-prod-price" min="0" step="0.01" required></div>
+          <button type="submit" class="btn btn-secondary">+ Add Product</button>
+        </form>
+      </div>
+
         <div class="card-head" style="margin-top: 30px;">
           <div><h3>General Sales Ledger</h3><div class="sub">Filter and search finalized general sales</div></div>
           <button class="btn btn-secondary btn-small" onclick="exportSalesCSV()">⬇ CSV</button>
@@ -1775,6 +1905,10 @@
             </div>
           </div>
           <div class="field small">
+            <label>Quick Month</label>
+            <input type="month" id="s-filter-month" onchange="applySalesMonthFilter()">
+          </div>
+          <div class="field small">
             <label>From Date</label>
             <input type="date" id="s-filter-from" onchange="renderSales()">
           </div>
@@ -1784,6 +1918,7 @@
           </div>
           <button class="btn btn-secondary btn-small" onclick="resetSalesFilters()" style="height:41px;">Reset Filters</button>
         </div>
+        <div class="sub" id="sales-live-summary" style="margin:-8px 0 14px;"></div>
 
         <div class="table-container">
           <table>
@@ -2029,10 +2164,6 @@
             <input type="text" id="e-search-query" placeholder="Type name or category..." oninput="renderExpenses()">
           </div>
           <div class="field small">
-            <label>Quick Month</label>
-            <input type="month" id="e-filter-month" onchange="applyExpenseMonthFilter()">
-          </div>
-          <div class="field small">
             <label>From Date</label>
             <input type="date" id="e-filter-from" onchange="renderExpenses()">
           </div>
@@ -2042,7 +2173,6 @@
           </div>
           <button class="btn btn-secondary btn-small" onclick="resetExpenseFilters()" style="height:41px;">Reset Filters</button>
         </div>
-        <div class="sub" id="expenses-live-summary" style="margin:-8px 0 14px;"></div>
 
         <div class="table-container">
           <table>
@@ -3274,12 +3404,15 @@
       flushOfflineQueue();
     }
 
-    ['p-date','s-date','cr-date','c-date','tr-date','e-date','pm-s-date','pm-c-date','bt-search-date','hist-date'].forEach(id=>{
+    loadDraftSalesItems();
+
+    ['p-date','s-date','cr-date','c-date','tr-date','e-date','pm-s-date','pm-p-date','pm-e-date','pm-w-date','bt-search-date','hist-date'].forEach(id=>{
       const el = document.getElementById(id);
       if(el && !el.value) el.value = todayStr();
     });
     navigate('overview');
     renderAll();
+    renderStagedSalesReceipt();
   }
 
   function updateUserProfileDisplay() {
@@ -3842,19 +3975,18 @@
     document.getElementById('pm-s-price').value = '';
   }
 
-  async function addPumiceCost(e){
+  async function addPumicePurchase(e){
     e.preventDefault();
-    const type = document.getElementById('pm-c-type').value;
-    const desc = document.getElementById('pm-c-desc').value.trim();
-    const date = document.getElementById('pm-c-date').value || todayStr();
-    const qty = Number(document.getElementById('pm-c-qty').value) || 1;
-    const amt = Number(document.getElementById('pm-c-amount').value) || 0;
+    const desc = document.getElementById('pm-p-desc').value.trim();
+    const date = document.getElementById('pm-p-date').value || todayStr();
+    const qty = Number(document.getElementById('pm-p-qty').value) || 1;
+    const amt = Number(document.getElementById('pm-p-amount').value) || 0;
 
     if (isServerMode()) {
       try {
         const created = await apiRequest('/api/pumice', {
           method: 'POST',
-          body: JSON.stringify({ date, type, desc, qty, amount: amt })
+          body: JSON.stringify({ date, type: 'purchase', desc, qty, amount: amt })
         });
         state.pumice.unshift({ id: created.id, date: created.date, type: created.type, desc: created.desc, qty: created.qty, amount: created.amount });
       } catch (err) {
@@ -3862,14 +3994,151 @@
         return;
       }
     } else {
-      state.pumice.unshift({ id: nextId(), date, type, desc, qty, amount: amt });
+      state.pumice.unshift({ id: nextId(), date, type: 'purchase', desc, qty, amount: amt });
     }
 
     saveStateToStorage();
     renderAll();
-    document.getElementById('pm-c-desc').value = '';
-    document.getElementById('pm-c-qty').value = '1';
-    document.getElementById('pm-c-amount').value = '';
+    document.getElementById('pm-p-desc').value = '';
+    document.getElementById('pm-p-qty').value = '1';
+    document.getElementById('pm-p-amount').value = '';
+  }
+
+  async function addPumiceExpense(e){
+    e.preventDefault();
+    const desc = document.getElementById('pm-e-desc').value.trim();
+    const date = document.getElementById('pm-e-date').value || todayStr();
+    const qty = Number(document.getElementById('pm-e-qty').value) || 1;
+    const amt = Number(document.getElementById('pm-e-amount').value) || 0;
+
+    if (isServerMode()) {
+      try {
+        const created = await apiRequest('/api/pumice', {
+          method: 'POST',
+          body: JSON.stringify({ date, type: 'expense', desc, qty, amount: amt })
+        });
+        state.pumice.unshift({ id: created.id, date: created.date, type: created.type, desc: created.desc, qty: created.qty, amount: created.amount });
+      } catch (err) {
+        alert('Could not save to server: ' + (err.message || 'unknown error'));
+        return;
+      }
+    } else {
+      state.pumice.unshift({ id: nextId(), date, type: 'expense', desc, qty, amount: amt });
+    }
+
+    saveStateToStorage();
+    renderAll();
+    document.getElementById('pm-e-desc').value = '';
+    document.getElementById('pm-e-qty').value = '1';
+    document.getElementById('pm-e-amount').value = '';
+  }
+
+  async function addPumiceWithdrawal(e){
+    e.preventDefault();
+    const recipient = document.getElementById('pm-w-recipient').value.trim();
+    const date = document.getElementById('pm-w-date').value || todayStr();
+    const amt = Number(document.getElementById('pm-w-amount').value) || 0;
+
+    if (!recipient || amt <= 0) return;
+
+    if (isServerMode()) {
+      try {
+        const created = await apiRequest('/api/pumice', {
+          method: 'POST',
+          body: JSON.stringify({ date, type: 'withdrawal', desc: recipient, qty: 1, amount: amt })
+        });
+        state.pumice.unshift({ id: created.id, date: created.date, type: created.type, desc: created.desc, qty: created.qty, amount: created.amount });
+      } catch (err) {
+        alert('Could not save to server: ' + (err.message || 'unknown error'));
+        return;
+      }
+    } else {
+      state.pumice.unshift({ id: nextId(), date, type: 'withdrawal', desc: recipient, qty: 1, amount: amt });
+    }
+
+    saveStateToStorage();
+    renderAll();
+    document.getElementById('pm-w-recipient').value = '';
+    document.getElementById('pm-w-amount').value = '';
+  }
+
+  function resetPumiceSalesFilters(){
+    document.getElementById('pm-s-search-query').value = '';
+    document.getElementById('pm-s-filter-from').value = '';
+    document.getElementById('pm-s-filter-to').value = '';
+    renderPumice();
+  }
+
+  function resetPumicePurchasesFilters(){
+    document.getElementById('pm-p-search-query').value = '';
+    document.getElementById('pm-p-filter-from').value = '';
+    document.getElementById('pm-p-filter-to').value = '';
+    renderPumice();
+  }
+
+  function resetPumiceExpensesFilters(){
+    document.getElementById('pm-e-search-query').value = '';
+    document.getElementById('pm-e-filter-from').value = '';
+    document.getElementById('pm-e-filter-to').value = '';
+    renderPumice();
+  }
+
+  function exportPumiceSalesCSV(){
+    exportToCSV(
+      `pumice-sales-${todayStr()}.csv`,
+      ['Date', 'Customer', 'Qty', 'Amount'],
+      state.pumice.filter(p => p.type === 'sale').map(p => [p.date, p.desc, p.qty || 1, p.amount])
+    );
+  }
+
+  function exportPumicePurchasesCSV(){
+    exportToCSV(
+      `pumice-purchases-${todayStr()}.csv`,
+      ['Date', 'Vendor / Description', 'Qty', 'Amount'],
+      state.pumice.filter(p => p.type === 'purchase').map(p => [p.date, p.desc, p.qty || 1, p.amount])
+    );
+  }
+
+  function exportPumiceExpensesCSV(){
+    exportToCSV(
+      `pumice-expenses-${todayStr()}.csv`,
+      ['Date', 'Description', 'Qty', 'Amount'],
+      state.pumice.filter(p => p.type === 'expense').map(p => [p.date, p.desc, p.qty || 1, p.amount])
+    );
+  }
+
+  function renderPumiceWithdrawals(){
+    const searchInput = document.getElementById('pm-w-search');
+    const q = searchInput ? searchInput.value.trim().toLowerCase() : '';
+
+    let withdrawals = state.pumice.filter(p => p.type === 'withdrawal');
+    if (q) {
+      withdrawals = withdrawals.filter(p => (p.desc || '').toLowerCase().includes(q));
+    }
+    withdrawals.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+    const total = withdrawals.reduce((s, x) => s + Number(x.amount), 0);
+    const summaryEl = document.getElementById('pm-w-summary');
+    if (summaryEl) {
+      if (q) {
+        summaryEl.textContent = `Total sent to "${searchInput.value.trim()}": ${fmt(total)} across ${withdrawals.length} withdrawal${withdrawals.length !== 1 ? 's' : ''}`;
+      } else {
+        summaryEl.textContent = `${withdrawals.length} withdrawal${withdrawals.length !== 1 ? 's' : ''} total — ${fmt(total)}`;
+      }
+    }
+
+    const body = document.getElementById('pm-withdrawals-ledger-body');
+    if (!body) return;
+    body.innerHTML = withdrawals.length === 0
+      ? `<tr class="empty-row"><td colspan="4">${q ? `No withdrawals found for "${searchInput.value.trim()}".` : 'No withdrawals logged yet.'}</td></tr>`
+      : withdrawals.map(p => `
+        <tr>
+          <td>${p.date}</td>
+          <td><strong>${p.desc}</strong></td>
+          <td class="num mono red">-${fmt(p.amount)}</td>
+          <td style="text-align:center;"><button class="row-edit" onclick="editPumice(${p.id})" title="Edit">✏</button><button class="row-del" onclick="deletePumice(${p.id})">✕</button></td>
+        </tr>
+      `).join('');
   }
 
   async function deletePumice(id){
@@ -3923,22 +4192,68 @@
     document.getElementById('pm-margin-perc').textContent = `Margin ${margin}`;
     document.getElementById('pm-mpesa-cash').textContent = fmt(mpesaVault);
 
-    const body = document.getElementById('pm-ledger-body');
-    if(state.pumice.length === 0){
-      body.innerHTML = '<tr class="empty-row"><td colspan="6">No Pumice transactions logged yet.</td></tr>';
-      return;
+    const allWithdrawals = state.pumice.filter(p => p.type === 'withdrawal');
+    const totWithdrawn = allWithdrawals.reduce((s, x) => s + Number(x.amount), 0);
+    document.getElementById('pm-total-withdrawn').textContent = fmt(totWithdrawn);
+    document.getElementById('pm-withdrawn-sub').textContent = `${allWithdrawals.length} withdrawal${allWithdrawals.length !== 1 ? 's' : ''}`;
+    renderPumiceWithdrawals();
+
+    const salesBody = document.getElementById('pm-sales-ledger-body');
+    const purchasesBody = document.getElementById('pm-purchases-ledger-body');
+    const expensesBody = document.getElementById('pm-expenses-ledger-body');
+
+    function applyPumiceFilters(records, searchId, fromId, toId){
+      const q = (document.getElementById(searchId)?.value || '').trim().toLowerCase();
+      const from = document.getElementById(fromId)?.value;
+      const to = document.getElementById(toId)?.value;
+      return records.filter(p => {
+        if (q && !(p.desc || '').toLowerCase().includes(q)) return false;
+        if (from && p.date < from) return false;
+        if (to && p.date > to) return false;
+        return true;
+      });
     }
 
-    body.innerHTML = state.pumice.map(p => `
-      <tr>
-        <td>${p.date}</td>
-        <td><span class="badge ${p.type==='sale' ? 'badge-ok' : (p.type==='purchase' ? 'badge-low' : 'badge-out')}">${p.type.toUpperCase()}</span></td>
-        <td>${p.desc}</td>
-        <td class="num mono">${p.qty || 1}</td>
-        <td class="num mono ${p.type==='sale' ? 'green' : 'red'}">${p.type==='sale' ? '+' : '-'}${fmt(p.amount)}</td>
-        <td style="text-align:center;"><button class="row-edit" onclick="editPumice(${p.id})" title="Edit">✏</button><button class="row-del" onclick="deletePumice(${p.id})">✕</button></td>
-      </tr>
-    `).join('');
+    const allSales = applyPumiceFilters(state.pumice.filter(p => p.type === 'sale'), 'pm-s-search-query', 'pm-s-filter-from', 'pm-s-filter-to');
+    const allPurchases = applyPumiceFilters(state.pumice.filter(p => p.type === 'purchase'), 'pm-p-search-query', 'pm-p-filter-from', 'pm-p-filter-to');
+    const allExpenses = applyPumiceFilters(state.pumice.filter(p => p.type === 'expense'), 'pm-e-search-query', 'pm-e-filter-from', 'pm-e-filter-to');
+
+    salesBody.innerHTML = allSales.length === 0
+      ? '<tr class="empty-row"><td colspan="5">No Pumice sales match your filters.</td></tr>'
+      : allSales.map(p => `
+        <tr>
+          <td>${p.date}</td>
+          <td>${p.desc}</td>
+          <td class="num mono">${p.qty || 1}</td>
+          <td class="num mono green">+${fmt(p.amount)}</td>
+          <td style="text-align:center;"><button class="row-edit" onclick="editPumice(${p.id})" title="Edit">✏</button><button class="row-del" onclick="deletePumice(${p.id})">✕</button></td>
+        </tr>
+      `).join('');
+
+    purchasesBody.innerHTML = allPurchases.length === 0
+      ? '<tr class="empty-row"><td colspan="5">No Pumice purchases match your filters.</td></tr>'
+      : allPurchases.map(p => `
+        <tr>
+          <td>${p.date}</td>
+          <td>${p.desc}</td>
+          <td class="num mono">${p.qty || 1}</td>
+          <td class="num mono red">-${fmt(p.amount)}</td>
+          <td style="text-align:center;"><button class="row-edit" onclick="editPumice(${p.id})" title="Edit">✏</button><button class="row-del" onclick="deletePumice(${p.id})">✕</button></td>
+        </tr>
+      `).join('');
+
+    expensesBody.innerHTML = allExpenses.length === 0
+      ? '<tr class="empty-row"><td colspan="5">No Pumice expenses match your filters.</td></tr>'
+      : allExpenses.map(p => `
+        <tr>
+          <td>${p.date}</td>
+          <td>${p.desc}</td>
+          <td class="num mono">${p.qty || 1}</td>
+          <td class="num mono red">-${fmt(p.amount)}</td>
+
+          <td style="text-align:center;"><button class="row-edit" onclick="editPumice(${p.id})" title="Edit">✏</button><button class="row-del" onclick="deletePumice(${p.id})">✕</button></td>
+        </tr>
+      `).join('');
   }
 
   // ---------------------------------------------------------------
@@ -3958,17 +4273,12 @@
     saveStateToStorage();
   }
 
-  async function addProduct(e) {
-    e.preventDefault();
-    const name = document.getElementById('prod-name').value.trim();
-    const category = document.getElementById('prod-category').value.trim() || 'General';
-    const cost = Number(document.getElementById('prod-cost').value) || 0;
-    const price = Number(document.getElementById('prod-price').value) || 0;
-
-    if (!name) return;
+  async function createProduct(name, category, cost, price){
+    name = name.trim();
+    if (!name) return false;
     if (state.products.some(p => p.name.toLowerCase() === name.toLowerCase())) {
       alert('A product with this name already exists.');
-      return;
+      return false;
     }
 
     if (isServerMode()) {
@@ -3980,7 +4290,7 @@
         state.products.push({ id: created.id, name: created.name, category: created.category, cost: created.cost, price: created.price });
       } catch (err) {
         alert('Could not save to server: ' + (err.message || 'unknown error'));
-        return;
+        return false;
       }
     } else {
       state.products.push({ id: nextId(), name, category, cost, price });
@@ -3988,11 +4298,40 @@
 
     saveStateToStorage();
     renderAll();
+    return true;
+  }
+
+  async function addProduct(e) {
+    e.preventDefault();
+    const name = document.getElementById('prod-name').value.trim();
+    const category = document.getElementById('prod-category').value.trim() || 'General';
+    const cost = Number(document.getElementById('prod-cost').value) || 0;
+    const price = Number(document.getElementById('prod-price').value) || 0;
+
+    const ok = await createProduct(name, category, cost, price);
+    if (!ok) return;
 
     document.getElementById('prod-name').value = '';
     document.getElementById('prod-category').value = '';
     document.getElementById('prod-cost').value = '';
     document.getElementById('prod-price').value = '';
+  }
+
+  async function addProductFromSales(e){
+    e.preventDefault();
+    const name = document.getElementById('sq-prod-name').value.trim();
+    const category = document.getElementById('sq-prod-category').value.trim() || 'General';
+    const cost = Number(document.getElementById('sq-prod-cost').value) || 0;
+    const price = Number(document.getElementById('sq-prod-price').value) || 0;
+
+    const ok = await createProduct(name, category, cost, price);
+    if (!ok) return;
+
+    document.getElementById('sq-prod-name').value = '';
+    document.getElementById('sq-prod-category').value = '';
+    document.getElementById('sq-prod-cost').value = '';
+    document.getElementById('sq-prod-price').value = '';
+    alert(`"${name}" added to your product catalog — it's now searchable in the Item Name field above.`);
   }
 
   async function updateProductPrice(id, field, value) {
@@ -4372,6 +4711,21 @@
     alert('Purchase receipt submitted successfully!');
   }
 
+  const DRAFT_SALES_KEY = 'kray_draft_sales_items';
+
+  function saveDraftSalesItems(){
+    try { localStorage.setItem(DRAFT_SALES_KEY, JSON.stringify(state.stagedSalesItems)); } catch(e){}
+  }
+
+  function loadDraftSalesItems(){
+    try {
+      const raw = localStorage.getItem(DRAFT_SALES_KEY);
+      state.stagedSalesItems = raw ? JSON.parse(raw) : [];
+    } catch(e){
+      state.stagedSalesItems = [];
+    }
+  }
+
   function addSaleItemToReceipt(e) {
     e.preventDefault();
     const item = document.getElementById('s-item').value.trim();
@@ -4382,6 +4736,7 @@
 
     state.stagedSalesItems.push({ item, qty, price, total: qty * price });
     renderStagedSalesReceipt();
+    saveDraftSalesItems();
     ensureProductExists(item, 'General', 0, price);
 
     document.getElementById('s-item').value = '';
@@ -4392,6 +4747,7 @@
   function removeStagedSaleItem(idx) {
     state.stagedSalesItems.splice(idx, 1);
     renderStagedSalesReceipt();
+    saveDraftSalesItems();
   }
 
   function renderStagedSalesReceipt() {
@@ -4471,6 +4827,7 @@
 
       state.stagedSalesItems = [];
       renderStagedSalesReceipt();
+      saveDraftSalesItems();
       saveStateToStorage();
       renderAll();
 
@@ -4502,6 +4859,7 @@
 
       state.stagedSalesItems = [];
       renderStagedSalesReceipt();
+      saveDraftSalesItems();
       saveStateToStorage();
       renderAll();
 
@@ -4768,8 +5126,26 @@
 
   function resetSalesFilters() {
     document.getElementById('s-search-query').value = '';
+    document.getElementById('s-filter-month').value = '';
     document.getElementById('s-filter-from').value = '';
     document.getElementById('s-filter-to').value = '';
+    renderSales();
+  }
+
+  function applySalesMonthFilter(){
+    const val = document.getElementById('s-filter-month').value;
+    if(!val){
+      document.getElementById('s-filter-from').value = '';
+      document.getElementById('s-filter-to').value = '';
+      renderSales();
+      return;
+    }
+    const [y, m] = val.split('-').map(Number);
+    const firstDay = new Date(y, m - 1, 1);
+    const lastDay = new Date(y, m, 0);
+    const toISO = (d) => d.toISOString().slice(0, 10);
+    document.getElementById('s-filter-from').value = toISO(firstDay);
+    document.getElementById('s-filter-to').value = toISO(lastDay);
     renderSales();
   }
 
@@ -4856,6 +5232,15 @@
 
     const totalRevenue = filtered.reduce((sum, s) => sum + (s.qty * s.price), 0);
     document.getElementById('sales-total').textContent = fmt(totalRevenue);
+
+    const liveSummary = document.getElementById('sales-live-summary');
+    if (liveSummary) {
+      if (q || from || to) {
+        liveSummary.textContent = `${filtered.length} matching sale${filtered.length !== 1 ? 's' : ''} — totaling ${fmt(totalRevenue)}`;
+      } else {
+        liveSummary.textContent = `${filtered.length} sale${filtered.length !== 1 ? 's' : ''} total`;
+      }
+    }
 
     const pageSize = state.salesPageSize;
     const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
@@ -4970,26 +5355,8 @@
 
   function resetExpenseFilters(){
     document.getElementById('e-search-query').value = '';
-    document.getElementById('e-filter-month').value = '';
     document.getElementById('e-filter-from').value = '';
     document.getElementById('e-filter-to').value = '';
-    renderExpenses();
-  }
-
-  function applyExpenseMonthFilter(){
-    const val = document.getElementById('e-filter-month').value;
-    if(!val){
-      document.getElementById('e-filter-from').value = '';
-      document.getElementById('e-filter-to').value = '';
-      renderExpenses();
-      return;
-    }
-    const [y, m] = val.split('-').map(Number);
-    const firstDay = new Date(y, m - 1, 1);
-    const lastDay = new Date(y, m, 0);
-    const toISO = (d) => d.toISOString().slice(0, 10);
-    document.getElementById('e-filter-from').value = toISO(firstDay);
-    document.getElementById('e-filter-to').value = toISO(lastDay);
     renderExpenses();
   }
 
@@ -5029,15 +5396,6 @@
 
     const filteredTotal = filtered.reduce((s, x) => s + Number(x.amount), 0);
     document.getElementById('expenses-filtered-total').textContent = fmt(filteredTotal);
-
-    const liveSummary = document.getElementById('expenses-live-summary');
-    if (liveSummary) {
-      if (q || from || to) {
-        liveSummary.textContent = `${filtered.length} matching expense${filtered.length !== 1 ? 's' : ''} — totaling ${fmt(filteredTotal)}`;
-      } else {
-        liveSummary.textContent = `${filtered.length} expense${filtered.length !== 1 ? 's' : ''} total`;
-      }
-    }
 
     const body = document.getElementById('expenses-body');
     if(filtered.length === 0){
@@ -5218,7 +5576,7 @@
     });
   }
 
-  async function addHistoricalData(e) {
+  function addHistoricalData(e) {
     e.preventDefault();
     const type = document.getElementById('hist-type').value;
     const item = document.getElementById('hist-item').value.trim();
@@ -5228,43 +5586,14 @@
 
     if (!item || !date || price <= 0) return;
 
-    if (isServerMode()) {
-      try {
-        if (!state.products.some(p => p.name.toLowerCase() === item.toLowerCase())) {
-          const createdProduct = await apiRequest('/api/products', {
-            method: 'POST',
-            body: JSON.stringify({ name: item, category: 'General', cost: type === 'purchase' ? price : 0, price: type === 'sale' ? price : 0 })
-          });
-          state.products.push({ id: createdProduct.id, name: createdProduct.name, category: createdProduct.category, cost: createdProduct.cost, price: createdProduct.price });
-        }
+    if (!state.products.some(p => p.name.toLowerCase() === item.toLowerCase())) {
+      state.products.push({ id: nextId(), name: item, category: 'General', cost: type === 'purchase' ? price : 0, price: type === 'sale' ? price : 0 });
+    }
 
-        if (type === 'sale') {
-          const created = await apiRequest('/api/sales', {
-            method: 'POST',
-            body: JSON.stringify({ date, item, customer: 'Historical Entry', account: 'cash', qty, price })
-          });
-          state.sales.unshift({ id: created.id, receiptId: created.receipt_id, date: created.date, item: created.item, customer: created.customer, account: created.account, qty: created.qty, price: created.price });
-        } else {
-          const created = await apiRequest('/api/purchases', {
-            method: 'POST',
-            body: JSON.stringify({ date, item, supplier: 'Historical Supplier', account: 'cash', category: 'General', qty, cost: price })
-          });
-          state.purchases.unshift({ id: created.id, receiptId: created.receipt_id, date: created.date, item: created.item, supplier: created.supplier, account: created.account, category: created.category, qty: created.qty, cost: created.cost });
-        }
-      } catch (err) {
-        alert('Could not save to server: ' + (err.message || 'unknown error'));
-        return;
-      }
+    if (type === 'sale') {
+      state.sales.unshift({ id: nextId(), date, item, customer: 'Historical Entry', account: 'cash', qty, price });
     } else {
-      if (!state.products.some(p => p.name.toLowerCase() === item.toLowerCase())) {
-        state.products.push({ id: nextId(), name: item, category: 'General', cost: type === 'purchase' ? price : 0, price: type === 'sale' ? price : 0 });
-      }
-
-      if (type === 'sale') {
-        state.sales.unshift({ id: nextId(), date, item, customer: 'Historical Entry', account: 'cash', qty, price });
-      } else {
-        state.purchases.unshift({ id: nextId(), date, item, supplier: 'Historical Supplier', account: 'cash', category: 'General', qty, cost: price });
-      }
+      state.purchases.unshift({ id: nextId(), date, item, supplier: 'Historical Supplier', account: 'cash', category: 'General', qty, cost: price });
     }
 
     saveStateToStorage();
@@ -5320,83 +5649,6 @@
       prodStats[p.item].purchases += (p.qty * p.cost);
     });
 
-    const monthLabel = new Date(selYear, selMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-
-    // Top Selling Items — same selected month as the table below
-    const salesByItem = {};
-    monthlySales.forEach(s => {
-      if(!salesByItem[s.item]) salesByItem[s.item] = { qty: 0, total: 0 };
-      salesByItem[s.item].qty += Number(s.qty);
-      salesByItem[s.item].total += (s.qty * s.price);
-    });
-    monthlyCreditSales.forEach(c => {
-      if(!salesByItem[c.item]) salesByItem[c.item] = { qty: 0, total: 0 };
-      salesByItem[c.item].qty += Number(c.qty);
-      salesByItem[c.item].total += Number(c.total || 0);
-    });
-
-    const topSalesSub = document.getElementById('st-top-sales-sub');
-    if (topSalesSub) topSalesSub.textContent = `By total revenue — ${monthLabel}`;
-    const topSales = Object.keys(salesByItem).map(k => ({ item: k, ...salesByItem[k] })).sort((a,b) => b.total - a.total);
-    const topSalesBody = document.getElementById('st-top-sales');
-    if(topSalesBody){
-      if(topSales.length === 0){
-        topSalesBody.innerHTML = `<tr class="empty-row"><td colspan="3">No sales in ${monthLabel}.</td></tr>`;
-      } else {
-        topSalesBody.innerHTML = topSales.slice(0, 5).map(x => `
-          <tr><td><strong>${x.item}</strong></td><td class="num mono">${x.qty}</td><td class="num mono green">${fmt(x.total)}</td></tr>
-        `).join('');
-      }
-    }
-
-    // Top Purchases — same selected month
-    const purchasesByItem = {};
-    monthlyPurchases.forEach(p => {
-      if(!purchasesByItem[p.item]) purchasesByItem[p.item] = { qty: 0, total: 0 };
-      purchasesByItem[p.item].qty += Number(p.qty);
-      purchasesByItem[p.item].total += (p.qty * p.cost);
-    });
-
-    const topPurchasesSub = document.getElementById('st-top-purchases-sub');
-    if (topPurchasesSub) topPurchasesSub.textContent = `By total spend — ${monthLabel}`;
-    const topPurchases = Object.keys(purchasesByItem).map(k => ({ item: k, ...purchasesByItem[k] })).sort((a,b) => b.total - a.total);
-    const topPurchasesBody = document.getElementById('st-top-purchases');
-    if(topPurchasesBody){
-      if(topPurchases.length === 0){
-        topPurchasesBody.innerHTML = `<tr class="empty-row"><td colspan="3">No purchases in ${monthLabel}.</td></tr>`;
-      } else {
-        topPurchasesBody.innerHTML = topPurchases.slice(0, 5).map(x => `
-          <tr><td><strong>${x.item}</strong></td><td class="num mono">${x.qty}</td><td class="num mono">${fmt(x.total)}</td></tr>
-        `).join('');
-      }
-    }
-
-    // Product Movement — same selected month
-    const movementSub = document.getElementById('st-movement-sub');
-    if (movementSub) movementSub.textContent = `Products moving from highest to lowest quantity sold — ${monthLabel}`;
-    const movementList = Object.keys(salesByItem).map(k => ({ item: k, qty: salesByItem[k].qty })).sort((a,b) => b.qty - a.qty);
-    const movementBody = document.getElementById('st-product-movement');
-    if(movementBody){
-      if(movementList.length === 0){
-        movementBody.innerHTML = `<tr class="empty-row"><td colspan="4">No sales in ${monthLabel}.</td></tr>`;
-      } else {
-        const maxQty = movementList[0].qty || 1;
-        movementBody.innerHTML = movementList.map((x, idx) => {
-          const perc = Math.min(100, Math.round((x.qty / maxQty) * 100));
-          return `<tr>
-            <td class="mono" style="color:var(--text-dim);">${idx + 1}</td>
-            <td><strong>${x.item}</strong></td>
-            <td class="num mono">${x.qty} units</td>
-            <td>
-              <div style="background:var(--panel-alt); border-radius:4px; height:8px; width:100%; overflow:hidden;">
-                <div style="background:var(--cyan); height:100%; width:${perc}%;"></div>
-              </div>
-            </td>
-          </tr>`;
-        }).join('');
-      }
-    }
-
     const body = document.getElementById('st-monthly-products-body');
     const keys = Object.keys(prodStats).filter(k => prodStats[k].sales > 0 || prodStats[k].purchases > 0);
 
@@ -5447,6 +5699,71 @@
 
     document.getElementById('st-net-profit').textContent = fmt(estProfit);
     document.getElementById('st-margin-perc').textContent = `${margin} Margin`;
+
+    document.getElementById('st-movement-sub').textContent = `Products moving from highest to lowest quantity sold — ${pLabel}`;
+
+    // Top Selling Items
+    const salesByItem = {};
+    sales.forEach(s => {
+      if(!salesByItem[s.item]) salesByItem[s.item] = { qty: 0, total: 0 };
+      salesByItem[s.item].qty += Number(s.qty);
+      salesByItem[s.item].total += (s.qty * s.price);
+    });
+    creditSales.forEach(c => {
+      if(!salesByItem[c.item]) salesByItem[c.item] = { qty: 0, total: 0 };
+      salesByItem[c.item].qty += Number(c.qty);
+      salesByItem[c.item].total += Number(c.total || 0);
+    });
+
+    const topSales = Object.keys(salesByItem).map(k => ({ item: k, ...salesByItem[k] })).sort((a,b) => b.total - a.total);
+    const topSalesBody = document.getElementById('st-top-sales');
+    if(topSales.length === 0){
+      topSalesBody.innerHTML = '<tr class="empty-row"><td colspan="3">No sales in this period.</td></tr>';
+    } else {
+      topSalesBody.innerHTML = topSales.slice(0, 5).map(x => `
+        <tr><td><strong>${x.item}</strong></td><td class="num mono">${x.qty}</td><td class="num mono green">${fmt(x.total)}</td></tr>
+      `).join('');
+    }
+
+    // Top Purchases
+    const purchasesByItem = {};
+    purchases.forEach(p => {
+      if(!purchasesByItem[p.item]) purchasesByItem[p.item] = { qty: 0, total: 0 };
+      purchasesByItem[p.item].qty += Number(p.qty);
+      purchasesByItem[p.item].total += (p.qty * p.cost);
+    });
+
+    const topPurchases = Object.keys(purchasesByItem).map(k => ({ item: k, ...purchasesByItem[k] })).sort((a,b) => b.total - a.total);
+    const topPurchasesBody = document.getElementById('st-top-purchases');
+    if(topPurchases.length === 0){
+      topPurchasesBody.innerHTML = '<tr class="empty-row"><td colspan="3">No purchases in this period.</td></tr>';
+    } else {
+      topPurchasesBody.innerHTML = topPurchases.slice(0, 5).map(x => `
+        <tr><td><strong>${x.item}</strong></td><td class="num mono">${x.qty}</td><td class="num mono">${fmt(x.total)}</td></tr>
+      `).join('');
+    }
+
+    // Product Movement (Ranked by Qty)
+    const movementList = Object.keys(salesByItem).map(k => ({ item: k, qty: salesByItem[k].qty })).sort((a,b) => b.qty - a.qty);
+    const movementBody = document.getElementById('st-product-movement');
+    if(movementList.length === 0){
+      movementBody.innerHTML = '<tr class="empty-row"><td colspan="4">No sales in this period.</td></tr>';
+    } else {
+      const maxQty = movementList[0].qty || 1;
+      movementBody.innerHTML = movementList.map((x, idx) => {
+        const perc = Math.min(100, Math.round((x.qty / maxQty) * 100));
+        return `<tr>
+          <td class="mono" style="color:var(--text-dim);">${idx + 1}</td>
+          <td><strong>${x.item}</strong></td>
+          <td class="num mono">${x.qty} units</td>
+          <td>
+            <div style="background:var(--panel-alt); border-radius:4px; height:8px; width:100%; overflow:hidden;">
+              <div style="background:var(--cyan); height:100%; width:${perc}%;"></div>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    }
 
     renderMonthlyProductStats();
   }
