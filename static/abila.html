@@ -1664,7 +1664,7 @@
         <div class="card-head">
           <div>
             <h3>Monthly Product Net Performance</h3>
-            <div class="sub">Calculates Sales minus Purchases per product for the selected month. Negative net values are highlighted in red.</div>
+            <div class="sub">Calculates Sales minus Purchases per product for the selected month. Negative net values are highlighted in red. Top Selling Items, Top Purchases, and Product Movement below follow this same month.</div>
           </div>
           <div class="search-with-btn">
             <input type="month" id="st-month-picker" onchange="renderMonthlyProductStats()">
@@ -1709,7 +1709,7 @@
       <div class="two-col">
         <div class="card">
           <div class="card-head">
-            <div><h3>Top Selling Items</h3><div class="sub">By total revenue for period</div></div>
+            <div><h3>Top Selling Items</h3><div class="sub" id="st-top-sales-sub">By total revenue for period</div></div>
           </div>
           <div class="table-container">
             <table>
@@ -1721,7 +1721,7 @@
 
         <div class="card">
           <div class="card-head">
-            <div><h3>Top Purchases</h3><div class="sub">By total spend for period</div></div>
+            <div><h3>Top Purchases</h3><div class="sub" id="st-top-purchases-sub">By total spend for period</div></div>
           </div>
           <div class="table-container">
             <table>
@@ -1742,6 +1742,35 @@
             <thead><tr><th>#</th><th>Item</th><th class="num">Qty Moved</th><th>Movement</th></tr></thead>
             <tbody id="st-product-movement"><tr class="empty-row"><td colspan="4">No sales in this period.</td></tr></tbody>
           </table>
+        </div>
+      </div>
+
+      <!-- PUMICE MONTHLY PERFORMANCE -->
+      <div class="card">
+        <div class="card-head">
+          <div><h3>Pumice Performance</h3><div class="sub" id="st-pumice-sub">Same shared M-Pesa account — for the selected month</div></div>
+        </div>
+        <div class="stat-grid">
+          <div class="panel stat-card">
+            <div class="label">Pumice Sales</div>
+            <div class="value green" id="st-pumice-sales">KSh 0</div>
+          </div>
+          <div class="panel stat-card">
+            <div class="label">Pumice Purchases</div>
+            <div class="value" id="st-pumice-purchases">KSh 0</div>
+          </div>
+          <div class="panel stat-card">
+            <div class="label">Pumice Expenses</div>
+            <div class="value" id="st-pumice-expenses">KSh 0</div>
+          </div>
+          <div class="panel stat-card">
+            <div class="label">Pumice Net Profit</div>
+            <div class="value amber" id="st-pumice-net">KSh 0</div>
+          </div>
+          <div class="panel stat-card">
+            <div class="label">Withdrawn to People</div>
+            <div class="value red" id="st-pumice-withdrawn">KSh 0</div>
+          </div>
         </div>
       </div>
     </div>
@@ -5605,6 +5634,31 @@
     document.getElementById('hist-price').value = '';
   }
 
+  function renderPumiceMonthlyStats(selYear, selMonth){
+    const monthLabel = new Date(selYear, selMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    const subEl = document.getElementById('st-pumice-sub');
+    if (subEl) subEl.textContent = `Same shared M-Pesa account — ${monthLabel}`;
+
+    const monthlyPumice = state.pumice.filter(p => {
+      const d = new Date(p.date);
+      return d.getFullYear() === selYear && d.getMonth() === selMonth;
+    });
+
+    const pSales = monthlyPumice.filter(p => p.type === 'sale').reduce((s, x) => s + Number(x.amount), 0);
+    const pPurchases = monthlyPumice.filter(p => p.type === 'purchase').reduce((s, x) => s + Number(x.amount), 0);
+    const pExpenses = monthlyPumice.filter(p => p.type === 'expense').reduce((s, x) => s + Number(x.amount), 0);
+    const pWithdrawn = monthlyPumice.filter(p => p.type === 'withdrawal').reduce((s, x) => s + Number(x.amount), 0);
+    const pNet = pSales - pPurchases - pExpenses;
+
+    document.getElementById('st-pumice-sales').textContent = fmt(pSales);
+    document.getElementById('st-pumice-purchases').textContent = fmt(pPurchases);
+    document.getElementById('st-pumice-expenses').textContent = fmt(pExpenses);
+    const netEl = document.getElementById('st-pumice-net');
+    netEl.textContent = fmt(pNet);
+    netEl.classList.toggle('red', pNet < 0);
+    document.getElementById('st-pumice-withdrawn').textContent = fmt(pWithdrawn);
+  }
+
   function renderMonthlyProductStats() {
     const picker = document.getElementById('st-month-picker');
     if (!picker || !picker.value) return;
@@ -5627,6 +5681,78 @@
       const d = new Date(p.date);
       return d.getFullYear() === selYear && d.getMonth() === selMonth;
     });
+
+    renderPumiceMonthlyStats(selYear, selMonth);
+
+    const monthLabel = new Date(selYear, selMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    document.getElementById('st-movement-sub').textContent = `Products moving from highest to lowest quantity sold — ${monthLabel}`;
+    const topSalesSub = document.getElementById('st-top-sales-sub');
+    if (topSalesSub) topSalesSub.textContent = `By total revenue — ${monthLabel}`;
+    const topPurchasesSub = document.getElementById('st-top-purchases-sub');
+    if (topPurchasesSub) topPurchasesSub.textContent = `By total spend — ${monthLabel}`;
+
+    // Top Selling Items
+    const salesByItem = {};
+    monthlySales.forEach(s => {
+      if(!salesByItem[s.item]) salesByItem[s.item] = { qty: 0, total: 0 };
+      salesByItem[s.item].qty += Number(s.qty);
+      salesByItem[s.item].total += (s.qty * s.price);
+    });
+    monthlyCreditSales.forEach(c => {
+      if(!salesByItem[c.item]) salesByItem[c.item] = { qty: 0, total: 0 };
+      salesByItem[c.item].qty += Number(c.qty);
+      salesByItem[c.item].total += Number(c.total || 0);
+    });
+
+    const topSales = Object.keys(salesByItem).map(k => ({ item: k, ...salesByItem[k] })).sort((a,b) => b.total - a.total);
+    const topSalesBody = document.getElementById('st-top-sales');
+    if(topSales.length === 0){
+      topSalesBody.innerHTML = `<tr class="empty-row"><td colspan="3">No sales in ${monthLabel}.</td></tr>`;
+    } else {
+      topSalesBody.innerHTML = topSales.slice(0, 5).map(x => `
+        <tr><td><strong>${x.item}</strong></td><td class="num mono">${x.qty}</td><td class="num mono green">${fmt(x.total)}</td></tr>
+      `).join('');
+    }
+
+    // Top Purchases
+    const purchasesByItem = {};
+    monthlyPurchases.forEach(p => {
+      if(!purchasesByItem[p.item]) purchasesByItem[p.item] = { qty: 0, total: 0 };
+      purchasesByItem[p.item].qty += Number(p.qty);
+      purchasesByItem[p.item].total += (p.qty * p.cost);
+    });
+
+    const topPurchases = Object.keys(purchasesByItem).map(k => ({ item: k, ...purchasesByItem[k] })).sort((a,b) => b.total - a.total);
+    const topPurchasesBody = document.getElementById('st-top-purchases');
+    if(topPurchases.length === 0){
+      topPurchasesBody.innerHTML = `<tr class="empty-row"><td colspan="3">No purchases in ${monthLabel}.</td></tr>`;
+    } else {
+      topPurchasesBody.innerHTML = topPurchases.slice(0, 5).map(x => `
+        <tr><td><strong>${x.item}</strong></td><td class="num mono">${x.qty}</td><td class="num mono">${fmt(x.total)}</td></tr>
+      `).join('');
+    }
+
+    // Product Movement (Ranked by Qty)
+    const movementList = Object.keys(salesByItem).map(k => ({ item: k, qty: salesByItem[k].qty })).sort((a,b) => b.qty - a.qty);
+    const movementBody = document.getElementById('st-product-movement');
+    if(movementList.length === 0){
+      movementBody.innerHTML = `<tr class="empty-row"><td colspan="4">No sales in ${monthLabel}.</td></tr>`;
+    } else {
+      const maxQty = movementList[0].qty || 1;
+      movementBody.innerHTML = movementList.map((x, idx) => {
+        const perc = Math.min(100, Math.round((x.qty / maxQty) * 100));
+        return `<tr>
+          <td class="mono" style="color:var(--text-dim);">${idx + 1}</td>
+          <td><strong>${x.item}</strong></td>
+          <td class="num mono">${x.qty} units</td>
+          <td>
+            <div style="background:var(--panel-alt); border-radius:4px; height:8px; width:100%; overflow:hidden;">
+              <div style="background:var(--cyan); height:100%; width:${perc}%;"></div>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    }
 
     const prodStats = {};
 
@@ -5699,71 +5825,6 @@
 
     document.getElementById('st-net-profit').textContent = fmt(estProfit);
     document.getElementById('st-margin-perc').textContent = `${margin} Margin`;
-
-    document.getElementById('st-movement-sub').textContent = `Products moving from highest to lowest quantity sold — ${pLabel}`;
-
-    // Top Selling Items
-    const salesByItem = {};
-    sales.forEach(s => {
-      if(!salesByItem[s.item]) salesByItem[s.item] = { qty: 0, total: 0 };
-      salesByItem[s.item].qty += Number(s.qty);
-      salesByItem[s.item].total += (s.qty * s.price);
-    });
-    creditSales.forEach(c => {
-      if(!salesByItem[c.item]) salesByItem[c.item] = { qty: 0, total: 0 };
-      salesByItem[c.item].qty += Number(c.qty);
-      salesByItem[c.item].total += Number(c.total || 0);
-    });
-
-    const topSales = Object.keys(salesByItem).map(k => ({ item: k, ...salesByItem[k] })).sort((a,b) => b.total - a.total);
-    const topSalesBody = document.getElementById('st-top-sales');
-    if(topSales.length === 0){
-      topSalesBody.innerHTML = '<tr class="empty-row"><td colspan="3">No sales in this period.</td></tr>';
-    } else {
-      topSalesBody.innerHTML = topSales.slice(0, 5).map(x => `
-        <tr><td><strong>${x.item}</strong></td><td class="num mono">${x.qty}</td><td class="num mono green">${fmt(x.total)}</td></tr>
-      `).join('');
-    }
-
-    // Top Purchases
-    const purchasesByItem = {};
-    purchases.forEach(p => {
-      if(!purchasesByItem[p.item]) purchasesByItem[p.item] = { qty: 0, total: 0 };
-      purchasesByItem[p.item].qty += Number(p.qty);
-      purchasesByItem[p.item].total += (p.qty * p.cost);
-    });
-
-    const topPurchases = Object.keys(purchasesByItem).map(k => ({ item: k, ...purchasesByItem[k] })).sort((a,b) => b.total - a.total);
-    const topPurchasesBody = document.getElementById('st-top-purchases');
-    if(topPurchases.length === 0){
-      topPurchasesBody.innerHTML = '<tr class="empty-row"><td colspan="3">No purchases in this period.</td></tr>';
-    } else {
-      topPurchasesBody.innerHTML = topPurchases.slice(0, 5).map(x => `
-        <tr><td><strong>${x.item}</strong></td><td class="num mono">${x.qty}</td><td class="num mono">${fmt(x.total)}</td></tr>
-      `).join('');
-    }
-
-    // Product Movement (Ranked by Qty)
-    const movementList = Object.keys(salesByItem).map(k => ({ item: k, qty: salesByItem[k].qty })).sort((a,b) => b.qty - a.qty);
-    const movementBody = document.getElementById('st-product-movement');
-    if(movementList.length === 0){
-      movementBody.innerHTML = '<tr class="empty-row"><td colspan="4">No sales in this period.</td></tr>';
-    } else {
-      const maxQty = movementList[0].qty || 1;
-      movementBody.innerHTML = movementList.map((x, idx) => {
-        const perc = Math.min(100, Math.round((x.qty / maxQty) * 100));
-        return `<tr>
-          <td class="mono" style="color:var(--text-dim);">${idx + 1}</td>
-          <td><strong>${x.item}</strong></td>
-          <td class="num mono">${x.qty} units</td>
-          <td>
-            <div style="background:var(--panel-alt); border-radius:4px; height:8px; width:100%; overflow:hidden;">
-              <div style="background:var(--cyan); height:100%; width:${perc}%;"></div>
-            </div>
-          </td>
-        </tr>`;
-      }).join('');
-    }
 
     renderMonthlyProductStats();
   }
