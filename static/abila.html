@@ -2514,6 +2514,15 @@
     _id: 1
   };
   function nextId(){ return state._id++; }
+  // Receipt numbers must be unique across devices/users (a local counter collides and
+  // makes new entries merge into old receipts), so base them on the clock.
+  let _lastReceiptId = 0;
+  function newReceiptId(){
+    let id = Math.floor(Date.now() / 1000);
+    if (id <= _lastReceiptId) id = _lastReceiptId + 1;
+    _lastReceiptId = id;
+    return id;
+  }
 
   // ---------------------------------------------------------------
   // SERVER CONNECTION (optional) — talks to the Python backend when
@@ -4826,7 +4835,7 @@
     }
 
     const items = state.stagedPurchaseItems.slice();
-    const receiptId = nextId();
+    const receiptId = newReceiptId();
 
     if (document.getElementById('p-split-toggle') && document.getElementById('p-split-toggle').checked) {
       const total = purchaseReceiptTotal();
@@ -5007,7 +5016,7 @@
         alert('Split amounts total ' + fmt(sum) + ' but the receipt is ' + fmt(receiptTotal) + '. They must match exactly.');
         return;
       }
-      const receiptId = nextId();
+      const receiptId = newReceiptId();
       const itemsDesc = items.map(it => `${it.item} x${it.qty}`).join(', ');
       const splitBreakdown = [];
       try {
@@ -5059,7 +5068,7 @@
     }
 
     if (account === 'credit') {
-      const receiptId = nextId();
+      const receiptId = newReceiptId();
       const committedItems = [];
 
       if (isServerMode()) {
@@ -5099,7 +5108,7 @@
 
       openReceiptModal({ receiptId, date, customer, account, items: committedItems });
     } else {
-      const receiptId = nextId();
+      const receiptId = newReceiptId();
       const committedItems = [];
 
       if (isServerMode()) {
@@ -5524,10 +5533,15 @@
 
   // ---- Group records into one row per receipt (customer/supplier) ----
   const expandedReceipts = new Set();
+  function receiptKey(prefix, r) {
+    if (!r.receiptId) return prefix + 'i' + r.id;
+    const who = String(r.customer || r.supplier || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    return prefix + 'r' + r.receiptId + '_' + (r.date || '') + '_' + who;
+  }
   function groupByReceipt(list, prefix) {
     const map = new Map(); const out = [];
     list.forEach(r => {
-      const key = prefix + (r.receiptId ? 'r' + r.receiptId : 'i' + r.id);
+      const key = receiptKey(prefix, r);
       let g = map.get(key);
       if (!g) { g = { key, rows: [] }; map.set(key, g); out.push(g); }
       g.rows.push(r);
@@ -5540,7 +5554,7 @@
   }
   async function deleteReceiptGroup(kind, key) {
     const arr = kind === 'p' ? state.purchases : state.sales;
-    const rows = arr.filter(r => (kind + (r.receiptId ? 'r' + r.receiptId : 'i' + r.id)) === key);
+    const rows = arr.filter(r => receiptKey(kind, r) === key);
     if (!rows.length) return;
     if (!confirm(`Delete this whole receipt (${rows.length} records)?`)) return;
     const url = kind === 'p' ? '/api/purchases/' : '/api/sales/';
