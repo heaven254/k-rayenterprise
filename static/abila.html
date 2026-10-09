@@ -2485,6 +2485,20 @@
   </div>
 </div>
 
+<div id="receipt-edit-overlay" class="receipt-modal-overlay hidden" onclick="if(event.target===this) closeReceiptEdit();">
+  <div class="receipt-modal" style="max-width:520px;">
+    <div class="receipt-modal-head">
+      <h3 id="re-title">Edit Receipt</h3>
+      <button class="receipt-modal-close" onclick="closeReceiptEdit()">✕</button>
+    </div>
+    <div class="receipt-modal-body" id="re-body" style="padding:16px;"></div>
+    <div class="receipt-modal-actions">
+      <button class="btn btn-secondary" onclick="closeReceiptEdit()">Cancel</button>
+      <button class="btn btn-primary" id="re-save-btn" onclick="saveReceiptEdit()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
 <script>
   // ---------------------------------------------------------------
   // STATE
@@ -4789,6 +4803,32 @@
     updatePurchaseSplitRemaining();
   }
 
+  // ---- Split allocation: walk the items in order and fill each account's
+  // portion, splitting an item's quantity across accounts when needed. Keeps real
+  // item names/quantities/prices so stats (profit, top selling) stay accurate. ----
+  function allocateSplit(items, unitKey, portions) {
+    const out = [];
+    const queue = portions.map(p => ({ account: p.account, left: p.amount }));
+    let qi = 0;
+    items.forEach(it => {
+      const unit = it[unitKey];
+      let qtyLeft = it.qty;
+      while (qtyLeft > 1e-9 && qi < queue.length) {
+        const slot = queue[qi];
+        if (slot.left <= 0.005) { qi++; continue; }
+        const itemLeftAmt = qtyLeft * unit;
+        let qtyPart, amtUsed;
+        if (itemLeftAmt <= slot.left + 0.005) { qtyPart = qtyLeft; amtUsed = itemLeftAmt; }
+        else { qtyPart = slot.left / unit; amtUsed = slot.left; }
+        out.push({ item: it, account: slot.account, qty: qtyPart });
+        slot.left -= amtUsed;
+        qtyLeft -= qtyPart;
+        if (slot.left <= 0.005) qi++;
+      }
+    });
+    return out;
+  }
+
   // ---- Split payment helpers (Purchases) ----
   const P_SPLIT_FIELDS = ['pochi','mpesa','cash','moneybox'];
   function purchaseReceiptTotal(){ return state.stagedPurchaseItems.reduce((a,it)=>a+it.total,0); }
@@ -4845,18 +4885,19 @@
         alert('Purchases must be fully paid — no debt allowed. Split amounts total ' + fmt(sum) + ' but the receipt is ' + fmt(total) + '.');
         return;
       }
-      const itemsDesc = items.map(it => `${it.item} x${it.qty}`).join(', ');
       const portions = P_SPLIT_FIELDS.filter(f => a[f] > 0);
+      const parts = allocateSplit(items, 'cost', portions.map(f => ({ account: f, amount: a[f] })));
       try {
-        for (const f of portions) {
+        for (const pt of parts) {
+          const it = pt.item;
           if (isServerMode()) {
             const created = await apiRequest('/api/purchases', {
               method: 'POST',
-              body: JSON.stringify({ receipt_id: receiptId, date, item: itemsDesc, category: 'General', supplier, account: f, qty: 1, cost: a[f] })
+              body: JSON.stringify({ receipt_id: receiptId, date, item: it.item, category: it.category, supplier, account: pt.account, qty: pt.qty, cost: it.cost })
             });
             state.purchases.unshift({ id: created.id, receiptId: created.receipt_id, date: created.date, item: created.item, supplier: created.supplier, account: created.account, category: created.category, qty: created.qty, cost: created.cost });
           } else {
-            state.purchases.unshift({ id: nextId(), receiptId, date, item: itemsDesc, supplier, account: f, category: 'General', qty: 1, cost: a[f] });
+            state.purchases.unshift({ id: nextId(), receiptId, date, item: it.item, supplier, account: pt.account, category: it.category, qty: pt.qty, cost: it.cost });
           }
         }
       } catch (err) {
@@ -5017,41 +5058,41 @@
         return;
       }
       const receiptId = newReceiptId();
-      const itemsDesc = items.map(it => `${it.item} x${it.qty}`).join(', ');
       const splitBreakdown = [];
+      const portions = S_SPLIT_FIELDS.filter(f => a[f] > 0).map(f => ({ account: f, amount: a[f] }));
+      const parts = allocateSplit(items, 'price', portions);
       try {
-        for (const f of ['pochi','mpesa','cash','moneybox']) {
-          if (a[f] <= 0) continue;
-          if (isServerMode()) {
+        for (const pt of parts) {
+          const it = pt.item;
+          if (pt.account === 'debt') {
+            if (isServerMode()) {
+              const created = await apiRequest('/api/credit-sales', {
+                method: 'POST',
+                body: JSON.stringify({ receipt_id: receiptId, date, customer, item: it.item, qty: pt.qty, price: it.price })
+              });
+              state.creditSales.unshift({
+                id: created.id, receiptId: created.receipt_id, date: created.date, customer: created.customer,
+                item: created.item, qty: created.qty, price: created.price, total: created.total,
+                paid: created.paid, remaining: created.remaining, payments: []
+              });
+            } else {
+              const total = pt.qty * it.price;
+              state.creditSales.unshift({
+                id: nextId(), receiptId, date, customer, item: it.item, qty: pt.qty, price: it.price,
+                total, paid: 0, remaining: total, payments: []
+              });
+            }
+          } else if (isServerMode()) {
             const created = await apiRequest('/api/sales', {
               method: 'POST',
-              body: JSON.stringify({ receipt_id: receiptId, date, item: itemsDesc, customer, account: f, qty: 1, price: a[f] })
+              body: JSON.stringify({ receipt_id: receiptId, date, item: it.item, customer, account: pt.account, qty: pt.qty, price: it.price })
             });
             state.sales.unshift({ id: created.id, receiptId: created.receipt_id, date: created.date, item: created.item, customer: created.customer, account: created.account, qty: created.qty, price: created.price });
           } else {
-            state.sales.unshift({ id: nextId(), receiptId, date, item: itemsDesc, customer, account: f, qty: 1, price: a[f] });
+            state.sales.unshift({ id: nextId(), receiptId, date, item: it.item, customer, account: pt.account, qty: pt.qty, price: it.price });
           }
-          splitBreakdown.push({ label: accountLabels[f], amount: a[f] });
         }
-        if (a.debt > 0) {
-          if (isServerMode()) {
-            const created = await apiRequest('/api/credit-sales', {
-              method: 'POST',
-              body: JSON.stringify({ receipt_id: receiptId, date, customer, item: itemsDesc, qty: 1, price: a.debt })
-            });
-            state.creditSales.unshift({
-              id: created.id, receiptId: created.receipt_id, date: created.date, customer: created.customer,
-              item: created.item, qty: created.qty, price: created.price, total: created.total,
-              paid: created.paid, remaining: created.remaining, payments: []
-            });
-          } else {
-            state.creditSales.unshift({
-              id: nextId(), receiptId, date, customer, item: itemsDesc, qty: 1, price: a.debt,
-              total: a.debt, paid: 0, remaining: a.debt, payments: []
-            });
-          }
-          splitBreakdown.push({ label: 'Debt (Credit)', amount: a.debt });
-        }
+        portions.forEach(p => splitBreakdown.push({ label: p.account === 'debt' ? 'Debt (Credit)' : accountLabels[p.account], amount: p.amount }));
       } catch (err) {
         alert('Could not save to server: ' + (err.message || 'unknown error'));
         return;
@@ -5156,15 +5197,20 @@
     const accts = new Set(group.map(s => s.account));
     const debtParts = sale.receiptId ? state.creditSales.filter(c => c.receiptId === sale.receiptId) : [];
     if (sale.receiptId && (accts.size > 1 || debtParts.length)) {
-      const breakdown = [];
-      group.forEach(s => breakdown.push({ label: accountLabels[s.account] || s.account, amount: s.qty * s.price }));
-      debtParts.forEach(c => breakdown.push({ label: 'Debt (Credit)', amount: c.total }));
-      const names = [...new Set(group.map(s => s.item))].join(', ');
-      const grand = breakdown.reduce((x, b) => x + b.amount, 0);
+      const byAcct = new Map();
+      group.forEach(r => byAcct.set(r.account, (byAcct.get(r.account) || 0) + r.qty * r.price));
+      const breakdown = [...byAcct].map(([ac, amt]) => ({ label: accountLabels[ac] || ac, amount: amt }));
+      const debtTotal = debtParts.reduce((x, c) => x + c.total, 0);
+      if (debtTotal > 0) breakdown.push({ label: 'Debt (Credit)', amount: debtTotal });
+      const byItem = new Map();
+      group.concat(debtParts).forEach(r => {
+        const k = r.item + '|' + r.price;
+        const cur = byItem.get(k) || { item: r.item, qty: 0, price: r.price, total: 0 };
+        cur.qty += r.qty; cur.total += r.qty * r.price; byItem.set(k, cur);
+      });
       openReceiptModal({
         receiptId: sale.receiptId, date: sale.date, customer: sale.customer, account: 'split',
-        splitBreakdown: breakdown,
-        items: [{ item: debtParts.length ? (debtParts[0].item) : names, qty: 1, price: grand, total: grand }]
+        splitBreakdown: breakdown, items: [...byItem.values()]
       });
       return;
     }
@@ -5506,14 +5552,14 @@
       const head = `
       <tr class="receipt-group-row" style="cursor:pointer;" onclick="toggleReceiptGroup('${g.key}','p')">
         <td>${first.date}</td>
-        <td><strong>${open ? '▾' : '▸'} ${g.rows.length} item${g.rows.length !== 1 ? 's' : ''}</strong></td>
+        <td><strong>${open ? '▾' : '▸'} ${new Set(g.rows.map(r => r.item)).size} item${new Set(g.rows.map(r => r.item)).size !== 1 ? 's' : ''}</strong></td>
         <td><strong>${first.supplier || '—'}</strong></td>
         <td>${acctLabel}</td>
         <td class="num mono">${g.rows.reduce((x, r) => x + r.qty, 0)}</td>
         <td class="num mono">—</td>
         <td class="num mono">${fmt(total)}</td>
         <td style="text-align:center; white-space:nowrap;" onclick="event.stopPropagation()">
-          ${g.rows.length > 1 ? `<button class="row-del" onclick="deleteReceiptGroup('p','${g.key}')" title="Delete whole receipt">✕</button>` : `<button class="row-edit" onclick="editPurchase(${first.id})" title="Edit">✏</button><button class="row-del" onclick="deletePurchase(${first.id})">✕</button>`}
+          <button class="row-edit" onclick="editReceiptGroup('p','${g.key}')" title="Edit receipt">✏</button><button class="row-del" onclick="deleteReceiptGroup('p','${g.key}')" title="Delete whole receipt">✕</button>
         </td>
       </tr>`;
       if (!open) return head;
@@ -5552,6 +5598,117 @@
     if (expandedReceipts.has(key)) expandedReceipts.delete(key); else expandedReceipts.add(key);
     if (kind === 'p') renderPurchases(); else renderSales();
   }
+
+  // ---------------------------------------------------------------
+  // EDIT A WHOLE RECEIPT (sales or purchases)
+  // ---------------------------------------------------------------
+  let reEdit = null;
+  function reEsc(v){ return String(v == null ? '' : v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;'); }
+  function editReceiptGroup(kind, key) {
+    const arr = kind === 'p' ? state.purchases : state.sales;
+    const rows = arr.filter(r => receiptKey(kind, r) === key);
+    if (!rows.length) return;
+    const unitKey = kind === 'p' ? 'cost' : 'price';
+    reEdit = {
+      kind, unitKey, receiptId: rows[0].receiptId || null,
+      date: rows[0].date, who: (kind === 'p' ? rows[0].supplier : rows[0].customer) || '',
+      defaultAccount: rows[0].account || 'cash', category: rows[0].category || 'General',
+      rows: rows.map(r => ({ id: r.id, item: r.item, qty: r.qty, unit: r[unitKey], account: r.account || 'cash', removed: false, isNew: false }))
+    };
+    document.getElementById('re-title').textContent = kind === 'p' ? 'Edit Purchase Receipt' : 'Edit Sales Receipt';
+    renderReceiptEdit();
+    document.getElementById('receipt-edit-overlay').classList.remove('hidden');
+  }
+  function closeReceiptEdit(){ document.getElementById('receipt-edit-overlay').classList.add('hidden'); reEdit = null; }
+  function reTotal(){ return reEdit.rows.filter(r => !r.removed).reduce((x, r) => x + (Number(r.qty) || 0) * (Number(r.unit) || 0), 0); }
+  function renderReceiptEdit() {
+    const e = reEdit; if (!e) return;
+    const accOpts = a => ['pochi','mpesa','cash','moneybox'].map(k => `<option value="${k}" ${a === k ? 'selected' : ''}>${accountLabels[k]}</option>`).join('');
+    const st = 'width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2,transparent);color:inherit;font:inherit;';
+    document.getElementById('re-body').innerHTML = `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+        <div><div class="sub" style="margin-bottom:4px;">${e.kind === 'p' ? 'Supplier' : 'Customer'}</div><input style="${st}" value="${reEsc(e.who)}" oninput="reEdit.who=this.value"></div>
+        <div><div class="sub" style="margin-bottom:4px;">Date</div><input type="date" style="${st}" value="${reEsc(e.date)}" oninput="reEdit.date=this.value"></div>
+      </div>
+      ${e.rows.map((r, i) => r.removed ? `
+        <div style="opacity:.5;margin-bottom:10px;padding:10px;border:1px dashed var(--line);border-radius:10px;display:flex;justify-content:space-between;align-items:center;">
+          <span style="text-decoration:line-through;">${reEsc(r.item)}</span>
+          <button class="btn btn-secondary" style="padding:4px 10px;" onclick="reEdit.rows[${i}].removed=false;renderReceiptEdit()">Undo</button>
+        </div>` : `
+        <div style="margin-bottom:10px;padding:10px;border:1px solid var(--line);border-radius:10px;">
+          <input style="${st}margin-bottom:8px;" placeholder="Item" value="${reEsc(r.item)}" oninput="reEdit.rows[${i}].item=this.value">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <div><div class="sub" style="margin-bottom:2px;">Qty</div><input type="number" step="any" style="${st}" value="${r.qty}" oninput="reEdit.rows[${i}].qty=this.value;reUpdateTotal()"></div>
+            <div><div class="sub" style="margin-bottom:2px;">${e.kind === 'p' ? 'Unit cost' : 'Unit price'}</div><input type="number" step="any" style="${st}" value="${r.unit}" oninput="reEdit.rows[${i}].unit=this.value;reUpdateTotal()"></div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <select style="${st}" onchange="reEdit.rows[${i}].account=this.value">${accOpts(r.account)}</select>
+            <button class="row-del" onclick="reEdit.rows[${i}].isNew ? reEdit.rows.splice(${i},1) : (reEdit.rows[${i}].removed=true); renderReceiptEdit()" title="Remove line">✕</button>
+          </div>
+        </div>`).join('')}
+      <button class="btn btn-secondary" style="width:100%;margin-bottom:12px;" onclick="reEdit.rows.push({id:null,item:'',qty:1,unit:0,account:reEdit.defaultAccount,removed:false,isNew:true});renderReceiptEdit()">+ Add line</button>
+      <div style="display:flex;justify-content:space-between;font-weight:700;"><span>Receipt total</span><span class="mono" id="re-total">${fmt(reTotal())}</span></div>
+      ${e.kind === 's' ? '<div class="sub" style="margin-top:8px;">Any part of this receipt that was left as debt is edited in Credit Loans.</div>' : ''}`;
+  }
+  function reUpdateTotal(){ const el = document.getElementById('re-total'); if (el && reEdit) el.textContent = fmt(reTotal()); }
+
+  async function saveReceiptEdit() {
+    const e = reEdit; if (!e) return;
+    const kind = e.kind, uk = e.unitKey;
+    const live = e.rows.filter(r => !r.removed);
+    for (const r of live) {
+      if (!String(r.item).trim()) { alert('Every line needs an item name.'); return; }
+      if (!(Number(r.qty) > 0)) { alert('Quantity must be greater than 0 for "' + r.item + '".'); return; }
+      if (!(Number(r.unit) >= 0) || r.unit === '') { alert('Enter a price for "' + r.item + '".'); return; }
+    }
+    if (!live.length) { if (confirm('All lines are removed. Delete the whole receipt?')) { const key = receiptKey(kind, (kind === 'p' ? state.purchases : state.sales).find(x => x.id === e.rows[0].id)); closeReceiptEdit(); await deleteReceiptGroup(kind, key); } return; }
+    const arr = kind === 'p' ? state.purchases : state.sales;
+    const resource = kind === 'p' ? 'purchases' : 'sales';
+    const whoKey = kind === 'p' ? 'supplier' : 'customer';
+    const btn = document.getElementById('re-save-btn'); btn.disabled = true;
+    const receiptId = e.receiptId || newReceiptId();
+    try {
+      for (const r of e.rows) {
+        if (r.isNew && r.removed) continue;
+        if (r.removed) {
+          if (isServerMode()) await apiRequest(`/api/${resource}/${r.id}`, { method: 'DELETE' });
+          const i = arr.findIndex(x => x.id === r.id); if (i >= 0) arr.splice(i, 1);
+          continue;
+        }
+        const fields = { item: String(r.item).trim(), qty: Number(r.qty), [uk]: Number(r.unit), account: r.account, date: e.date || todayStr(), [whoKey]: e.who.trim() };
+        if (r.isNew) {
+          const body = Object.assign({ receipt_id: receiptId }, fields);
+          if (kind === 'p') body.category = e.category;
+          let rec;
+          if (isServerMode()) {
+            const c = await apiRequest(`/api/${resource}`, { method: 'POST', body: JSON.stringify(body) });
+            rec = { id: c.id, receiptId: c.receipt_id, date: c.date, item: c.item, account: c.account, qty: c.qty, [uk]: c[uk], [whoKey]: c[whoKey] };
+            if (kind === 'p') rec.category = c.category;
+          } else {
+            rec = Object.assign({ id: nextId(), receiptId }, fields); if (kind === 'p') rec.category = e.category;
+          }
+          arr.unshift(rec);
+        } else {
+          const rec = arr.find(x => x.id === r.id); if (!rec) continue;
+          const changed = {};
+          Object.keys(fields).forEach(k => { if (rec[k] !== fields[k]) changed[k] = fields[k]; });
+          if (Object.keys(changed).length === 0) continue;
+          if (isServerMode()) await apiRequest(`/api/${resource}/${r.id}`, { method: 'PUT', body: JSON.stringify(changed) });
+          Object.assign(rec, changed);
+        }
+      }
+    } catch (err) {
+      btn.disabled = false;
+      alert('Could not save all changes: ' + (err.message || 'unknown error') + '\n\nSome lines may have been saved. Refresh to see the current state.');
+      saveStateToStorage(); renderAll();
+      return;
+    }
+    btn.disabled = false;
+    closeReceiptEdit();
+    saveStateToStorage();
+    renderAll();
+  }
+
   async function deleteReceiptGroup(kind, key) {
     const arr = kind === 'p' ? state.purchases : state.sales;
     const rows = arr.filter(r => receiptKey(kind, r) === key);
@@ -5621,7 +5778,7 @@
       const head = `
       <tr class="receipt-group-row" style="cursor:pointer;" onclick="toggleReceiptGroup('${g.key}','s')">
         <td>${first.date}</td>
-        <td><strong>${open ? '▾' : '▸'} ${g.rows.length} item${g.rows.length !== 1 ? 's' : ''}</strong></td>
+        <td><strong>${open ? '▾' : '▸'} ${new Set(g.rows.map(r => r.item)).size} item${new Set(g.rows.map(r => r.item)).size !== 1 ? 's' : ''}</strong></td>
         <td><strong>${first.customer || 'Walk-in'}</strong></td>
         <td>${acctLabel}</td>
         <td class="num mono">${g.rows.reduce((x, r) => x + r.qty, 0)}</td>
@@ -5629,7 +5786,7 @@
         <td class="num mono green">${fmt(total)}</td>
         <td style="text-align:center; white-space:nowrap;" onclick="event.stopPropagation()">
           <button class="row-del row-print" onclick="viewReceiptForSale(${first.id})" title="View / Print Receipt">🖨</button>
-          ${g.rows.length > 1 ? `<button class="row-del" onclick="deleteReceiptGroup('s','${g.key}')" title="Delete whole receipt">✕</button>` : `<button class="row-edit" onclick="editSale(${first.id})" title="Edit">✏</button><button class="row-del" onclick="deleteSale(${first.id})" title="Delete">✕</button>`}
+          <button class="row-edit" onclick="editReceiptGroup('s','${g.key}')" title="Edit receipt">✏</button><button class="row-del" onclick="deleteReceiptGroup('s','${g.key}')" title="Delete whole receipt">✕</button>
         </td>
       </tr>`;
       if (!open) return head;
