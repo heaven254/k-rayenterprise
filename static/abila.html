@@ -1815,6 +1815,21 @@
               <tfoot><tr><td colspan="4">Receipt Total</td><td class="num" id="p-receipt-total">KSh 0</td><td></td></tr></tfoot>
             </table>
           </div>
+
+          <div class="checkbox-field" style="margin-top:14px;">
+            <input type="checkbox" id="p-split-toggle" onchange="togglePurchaseSplitPayment()">
+            <label for="p-split-toggle" style="text-transform:none; cursor:pointer;">Split payment across multiple accounts (e.g. part M-Pesa, part Cash)</label>
+          </div>
+
+          <div id="p-split-panel" class="hidden" style="margin-top:12px; padding:14px; background:var(--panel-alt); border-radius:10px;">
+            <div class="inline-form">
+              <div class="field small"><label>Pochi</label><input type="number" id="p-split-pochi" min="0" step="0.01" value="0" oninput="updatePurchaseSplitRemaining()"></div>
+              <div class="field small"><label>M-Pesa</label><input type="number" id="p-split-mpesa" min="0" step="0.01" value="0" oninput="updatePurchaseSplitRemaining()"></div>
+              <div class="field small"><label>Cash</label><input type="number" id="p-split-cash" min="0" step="0.01" value="0" oninput="updatePurchaseSplitRemaining()"></div>
+              <div class="field small"><label>Moneybox</label><input type="number" id="p-split-moneybox" min="0" step="0.01" value="0" oninput="updatePurchaseSplitRemaining()"></div>
+            </div>
+            <div class="sub" id="p-split-remaining-label" style="margin-top:4px;">Remaining to allocate: KSh 0 (purchases must be fully paid — no debt allowed)</div>
+          </div>
         </div>
 
         <div class="card-head" style="margin-top: 30px;">
@@ -1904,6 +1919,22 @@
               <tbody id="s-receipt-body"><tr class="empty-row"><td colspan="5">No items added to current receipt yet.</td></tr></tbody>
               <tfoot><tr><td colspan="3">Receipt Total</td><td class="num" id="s-receipt-total">KSh 0</td><td></td></tr></tfoot>
             </table>
+          </div>
+
+          <div class="checkbox-field" style="margin-top:14px;">
+            <input type="checkbox" id="s-split-toggle" onchange="toggleSalesSplitPayment()">
+            <label for="s-split-toggle" style="text-transform:none; cursor:pointer;">Split payment across multiple accounts (e.g. part M-Pesa, part Cash, part Debt)</label>
+          </div>
+
+          <div id="s-split-panel" class="hidden" style="margin-top:12px; padding:14px; background:var(--panel-alt); border-radius:10px;">
+            <div class="inline-form">
+              <div class="field small"><label>Pochi</label><input type="number" id="s-split-pochi" min="0" step="0.01" value="0" oninput="updateSalesSplitRemaining()"></div>
+              <div class="field small"><label>M-Pesa</label><input type="number" id="s-split-mpesa" min="0" step="0.01" value="0" oninput="updateSalesSplitRemaining()"></div>
+              <div class="field small"><label>Cash</label><input type="number" id="s-split-cash" min="0" step="0.01" value="0" oninput="updateSalesSplitRemaining()"></div>
+              <div class="field small"><label>Moneybox</label><input type="number" id="s-split-moneybox" min="0" step="0.01" value="0" oninput="updateSalesSplitRemaining()"></div>
+              <div class="field small"><label style="color:var(--red);">Debt</label><input type="number" id="s-split-debt" min="0" step="0.01" value="0" oninput="updateSalesSplitRemaining()"></div>
+            </div>
+            <div class="sub" id="s-split-remaining-label" style="margin-top:4px;">Remaining to allocate: KSh 0</div>
           </div>
         </div>
 
@@ -2035,10 +2066,8 @@
           <table>
             <thead>
               <tr>
-                <th>Date</th>
                 <th>Customer Name</th>
-                <th>Item</th>
-                <th class="num">Qty</th>
+                <th>Items</th>
                 <th class="num">Total Debt</th>
                 <th class="num">Paid Amount</th>
                 <th class="num">Remaining Balance</th>
@@ -2047,11 +2076,11 @@
               </tr>
             </thead>
             <tbody id="credit-sales-body">
-              <tr class="empty-row"><td colspan="9">No credit loans recorded yet.</td></tr>
+              <tr class="empty-row"><td colspan="7">No credit loans recorded yet.</td></tr>
             </tbody>
             <tfoot>
               <tr>
-                <td colspan="4">Total Outstanding Debt</td>
+                <td colspan="2">Total Outstanding Debt</td>
                 <td class="num" id="cr-total-debt-sum">KSh 0</td>
                 <td class="num" id="cr-total-paid-sum">KSh 0</td>
                 <td class="num red" id="cr-total-rem-sum">KSh 0</td>
@@ -2933,7 +2962,8 @@
     mpesa: 'M-Pesa',
     cash: 'Cash',
     moneybox: 'Moneybox',
-    credit: 'Credit Account (Owed)'
+    credit: 'Credit Account (Owed)',
+    split: 'Split Payment'
   };
 
   async function tryAutoResumeSession() {
@@ -3767,26 +3797,46 @@
     document.getElementById('cr-item').value = '';
   }
 
-  async function recordCreditRepayment(creditId) {
-    const cs = state.creditSales.find(c => c.id === creditId);
-    if (!cs) return;
+  async function applyPaymentToCreditSale(cs, amount, account, date) {
+    // Applies `amount` against a single underlying credit_sales record,
+    // syncing to the server if connected. Used internally by the
+    // customer-level payment functions below (which spread one payment
+    // across a person's oldest unpaid items first).
+    if (isServerMode()) {
+      const updated = await apiRequest(`/api/credit-sales/${cs.id}/payments`, {
+        method: 'POST',
+        body: JSON.stringify({ amount, account, date })
+      });
+      cs.paid = updated.paid;
+      cs.remaining = updated.remaining;
+      cs.payments = (updated.payments || []).map(p => ({ id: p.id, date: p.date, amount: p.amount, account: p.account }));
+    } else {
+      cs.payments = cs.payments || [];
+      cs.payments.push({ id: nextId(), date, amount, account });
+      cs.paid = cs.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+      cs.remaining = Math.max(0, cs.total - cs.paid);
+    }
+  }
 
-    const remaining = cs.remaining;
-    if (remaining <= 0) {
-      alert('This credit loan is already fully paid.');
+  async function recordCustomerRepayment(customerName) {
+    const items = state.creditSales.filter(c => c.customer === customerName && c.remaining > 0);
+    items.sort((a, b) => new Date(a.date) - new Date(b.date)); // oldest debt first
+    const totalRemaining = items.reduce((s, c) => s + Number(c.remaining), 0);
+
+    if (totalRemaining <= 0) {
+      alert(`${customerName} has no outstanding balance.`);
       return;
     }
 
-    const pmtAmountStr = prompt(`Enter repayment amount for ${cs.customer} (Remaining Balance: ${fmt(remaining)}):`, remaining);
+    const pmtAmountStr = prompt(`Enter repayment amount for ${customerName} (Total Remaining Balance: ${fmt(totalRemaining)}):`, totalRemaining);
     if (pmtAmountStr === null) return;
     const pmtAmount = Number(pmtAmountStr);
     if (isNaN(pmtAmount) || pmtAmount <= 0) {
       alert('Invalid payment amount entered.');
       return;
     }
-
-    if (pmtAmount > remaining + 0.01) {
-      alert(`Payment amount exceeds remaining balance of ${fmt(remaining)}.`);
+    if (pmtAmount > totalRemaining + 0.01) {
+      alert(`Payment amount exceeds total remaining balance of ${fmt(totalRemaining)}.`);
       return;
     }
 
@@ -3799,49 +3849,39 @@
 
     const pmtDate = prompt('Enter payment date (YYYY-MM-DD):', todayStr()) || todayStr();
 
-    if (isServerMode()) {
-      try {
-        const updated = await apiRequest(`/api/credit-sales/${creditId}/payments`, {
-          method: 'POST',
-          body: JSON.stringify({ amount: pmtAmount, account: targetAcc, date: pmtDate })
-        });
-        cs.paid = updated.paid;
-        cs.remaining = updated.remaining;
-        cs.payments = (updated.payments || []).map(p => ({ id: p.id, date: p.date, amount: p.amount, account: p.account }));
-      } catch (err) {
-        alert('Could not save payment to server: ' + (err.message || 'unknown error'));
-        return;
+    // Spread this one payment across the customer's overall balance —
+    // oldest unpaid item first — rather than asking which item it's for.
+    let remainingToApply = pmtAmount;
+    try {
+      for (const cs of items) {
+        if (remainingToApply <= 0) break;
+        const applyAmount = Math.min(remainingToApply, cs.remaining);
+        await applyPaymentToCreditSale(cs, applyAmount, targetAcc, pmtDate);
+        remainingToApply -= applyAmount;
       }
-    } else {
-      cs.payments = cs.payments || [];
-      cs.payments.push({ id: nextId(), date: pmtDate, amount: pmtAmount, account: targetAcc });
-      cs.paid = cs.payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
-      cs.remaining = Math.max(0, cs.total - cs.paid);
+    } catch (err) {
+      alert('Could not save payment to server: ' + (err.message || 'unknown error'));
     }
 
     saveStateToStorage();
     renderAll();
   }
 
-  function markCreditAsFullyPaid(creditId) {
-    const cs = state.creditSales.find(c => c.id === creditId);
-    if (!cs || cs.remaining <= 0) return;
+  async function markCustomerAsFullyPaid(customerName) {
+    const items = state.creditSales.filter(c => c.customer === customerName && c.remaining > 0);
+    if (items.length === 0) return;
 
-    if (!confirm(`Mark credit sale of ${fmt(cs.remaining)} for ${cs.customer} as FULLY PAID?`)) return;
+    const totalRemaining = items.reduce((s, c) => s + Number(c.remaining), 0);
+    if (!confirm(`Mark ${customerName}'s ENTIRE outstanding balance (${fmt(totalRemaining)}) as fully paid?`)) return;
 
-    const targetAcc = 'cash';
     const pmtDate = todayStr();
-
-    cs.payments = cs.payments || [];
-    cs.payments.push({
-      id: nextId(),
-      date: pmtDate,
-      amount: cs.remaining,
-      account: targetAcc
-    });
-
-    cs.paid = cs.total;
-    cs.remaining = 0;
+    try {
+      for (const cs of items) {
+        await applyPaymentToCreditSale(cs, cs.remaining, 'cash', pmtDate);
+      }
+    } catch (err) {
+      alert('Could not save payment to server: ' + (err.message || 'unknown error'));
+    }
 
     saveStateToStorage();
     renderAll();
@@ -3861,14 +3901,6 @@
   function renderCreditSales() {
     const query = (document.getElementById('cr-search-query').value || '').toLowerCase().trim();
     const statusFilter = document.getElementById('cr-filter-status').value;
-
-    let filtered = state.creditSales.filter(c => {
-      const matchSearch = c.customer.toLowerCase().includes(query) || c.item.toLowerCase().includes(query);
-      let matchStatus = true;
-      if (statusFilter === 'unpaid') matchStatus = c.remaining > 0;
-      else if (statusFilter === 'paid') matchStatus = c.remaining <= 0;
-      return matchSearch && matchStatus;
-    });
 
     let totalDebtSum = 0;
     let totalPaidSum = 0;
@@ -3906,42 +3938,92 @@
       overdueBanner.innerHTML = `<b>⏰ ${overdue.length} credit loan${overdue.length > 1 ? 's' : ''} overdue (30+ days unpaid)</b>${names}${extra}`;
     }
 
+    // Group every credit sale line-item by customer — the loan is
+    // tracked as one running balance per person, not per item.
+    const groups = {};
+    state.creditSales.forEach(c => {
+      const key = c.customer;
+      if (!groups[key]) groups[key] = { customer: key, items: [], total: 0, paid: 0, remaining: 0 };
+      groups[key].items.push(c);
+      groups[key].total += Number(c.total || 0);
+      groups[key].paid += Number(c.paid || 0);
+      groups[key].remaining += Number(c.remaining || 0);
+    });
+
+    let customerGroups = Object.values(groups).map(g => {
+      g.items.sort((a, b) => new Date(a.date) - new Date(b.date));
+      g.lastDate = g.items[g.items.length - 1].date;
+      g.isOverdue = g.remaining > 0 && g.items.some(c => c.remaining > 0 && (now - new Date(c.date)) / 86400000 > OVERDUE_DAYS);
+      return g;
+    });
+
+    customerGroups = customerGroups.filter(g => {
+      const matchSearch = g.customer.toLowerCase().includes(query) || g.items.some(c => c.item.toLowerCase().includes(query));
+      let matchStatus = true;
+      if (statusFilter === 'unpaid') matchStatus = g.remaining > 0;
+      else if (statusFilter === 'paid') matchStatus = g.remaining <= 0;
+      return matchSearch && matchStatus;
+    });
+
+    customerGroups.sort((a, b) => new Date(b.lastDate) - new Date(a.lastDate));
+
     const body = document.getElementById('credit-sales-body');
-    if (filtered.length === 0) {
-      body.innerHTML = '<tr class="empty-row"><td colspan="9">No credit loan records match your search criteria.</td></tr>';
+    if (customerGroups.length === 0) {
+      body.innerHTML = '<tr class="empty-row"><td colspan="7">No credit loan records match your search criteria.</td></tr>';
       return;
     }
 
-    body.innerHTML = filtered.map(c => {
-      const isPaid = c.remaining <= 0;
-      const ageDays = (now - new Date(c.date)) / 86400000;
-      const isOverdue = !isPaid && ageDays > OVERDUE_DAYS;
-      const statusBadge = isPaid 
-        ? '<span class="badge badge-ok">Fully Paid</span>' 
-        : isOverdue
+    body.innerHTML = customerGroups.map((g, idx) => {
+      const isPaid = g.remaining <= 0;
+      const statusBadge = isPaid
+        ? '<span class="badge badge-ok">Fully Paid</span>'
+        : g.isOverdue
           ? '<span class="badge badge-out">Overdue</span>'
-          : (c.paid > 0 ? '<span class="badge badge-low">Partial Paid</span>' : '<span class="badge badge-out">Unpaid</span>');
+          : (g.paid > 0 ? '<span class="badge badge-low">Partial Paid</span>' : '<span class="badge badge-out">Unpaid</span>');
+
+      const itemsSummary = g.items.length === 1 ? g.items[0].item : `${g.items.length} items`;
+
+      const detailRows = g.items.map(c => `
+        <tr class="credit-detail-row credit-detail-${idx} hidden">
+          <td colspan="2" style="padding-left:28px; color:var(--text-dim); font-size:12.5px;">↳ ${c.date} — ${c.item} (Qty ${c.qty})</td>
+          <td class="num mono" style="font-size:12.5px;">${fmt(c.total)}</td>
+          <td class="num mono green" style="font-size:12.5px;">${fmt(c.paid)}</td>
+          <td class="num mono ${c.remaining > 0 ? 'red' : 'green'}" style="font-size:12.5px;">${fmt(c.remaining)}</td>
+          <td></td>
+          <td style="text-align:center;"><button class="row-del" onclick="deleteCreditSale(${c.id})" title="Delete this item">✕</button></td>
+        </tr>
+      `).join('');
 
       return `
-        <tr class="${isOverdue ? 'row-overdue' : ''}">
-          <td>${c.date}</td>
-          <td><strong>${c.customer}</strong></td>
-          <td>${c.item}</td>
-          <td class="num mono">${c.qty}</td>
-          <td class="num mono">${fmt(c.total)}</td>
-          <td class="num mono green">${fmt(c.paid)}</td>
-          <td class="num mono ${c.remaining > 0 ? 'red' : 'green'}"><strong>${fmt(c.remaining)}</strong></td>
+        <tr class="${g.isOverdue ? 'row-overdue' : ''}">
+          <td><strong>${g.customer}</strong></td>
+          <td>
+            <button class="link-btn" onclick="toggleCreditDetail(${idx})" style="font-size:12.5px;">
+              <span id="credit-toggle-arrow-${idx}">▶</span> ${itemsSummary}
+            </button>
+          </td>
+          <td class="num mono">${fmt(g.total)}</td>
+          <td class="num mono green">${fmt(g.paid)}</td>
+          <td class="num mono ${g.remaining > 0 ? 'red' : 'green'}"><strong>${fmt(g.remaining)}</strong></td>
           <td>${statusBadge}</td>
           <td style="text-align:center;">
             ${!isPaid ? `
-              <button class="btn btn-secondary btn-small user-action" onclick="recordCreditRepayment(${c.id})" style="padding:4px 8px; font-size:11px;">+ Pay</button>
-              <button class="btn btn-primary btn-small" onclick="markCreditAsFullyPaid(${c.id})" style="padding:4px 8px; font-size:11px;">Mark Paid</button>
+              <button class="btn btn-secondary btn-small user-action" onclick="recordCustomerRepayment('${g.customer.replace(/'/g, "\\'")}')" style="padding:4px 8px; font-size:11px;">+ Pay</button>
+              <button class="btn btn-primary btn-small" onclick="markCustomerAsFullyPaid('${g.customer.replace(/'/g, "\\'")}')" style="padding:4px 8px; font-size:11px;">Mark Paid</button>
             ` : '<span class="muted" style="font-size:12px;">Completed</span>'}
-            <button class="row-del" onclick="deleteCreditSale(${c.id})" title="Delete entry">✕</button>
           </td>
         </tr>
+        ${detailRows}
       `;
     }).join('');
+  }
+
+  function toggleCreditDetail(idx){
+    const arrow = document.getElementById(`credit-toggle-arrow-${idx}`);
+    const rows = document.querySelectorAll(`.credit-detail-${idx}`);
+    const willShow = rows.length > 0 && rows[0].classList.contains('hidden');
+    rows.forEach(r => r.classList.toggle('hidden', !willShow));
+    if (arrow) arrow.textContent = willShow ? '▼' : '▶';
   }
 
   // ---------------------------------------------------------------
@@ -4677,6 +4759,7 @@
     if (state.stagedPurchaseItems.length === 0) {
       body.innerHTML = '<tr class="empty-row"><td colspan="6">No items added to current receipt yet.</td></tr>';
       totEl.textContent = 'KSh 0';
+      updatePurchaseSplitRemaining();
       return;
     }
 
@@ -4694,6 +4777,37 @@
     }).join('');
 
     totEl.textContent = fmt(tot);
+    updatePurchaseSplitRemaining();
+  }
+
+  // ---- Split payment helpers (Purchases) ----
+  const P_SPLIT_FIELDS = ['pochi','mpesa','cash','moneybox'];
+  function purchaseReceiptTotal(){ return state.stagedPurchaseItems.reduce((a,it)=>a+it.total,0); }
+  function readSplit(prefix, fields){
+    const out = {}; fields.forEach(f => { const el=document.getElementById(prefix+f); out[f] = el ? (parseFloat(el.value)||0) : 0; }); return out;
+  }
+  function togglePurchaseSplitPayment(){
+    const on = document.getElementById('p-split-toggle').checked;
+    document.getElementById('p-split-panel').classList.toggle('hidden', !on);
+    document.getElementById('p-account').disabled = on;
+    updatePurchaseSplitRemaining();
+  }
+  function updatePurchaseSplitRemaining(){
+    const lbl = document.getElementById('p-split-remaining-label'); if(!lbl) return;
+    const total = purchaseReceiptTotal();
+    const a = readSplit('p-split-', P_SPLIT_FIELDS);
+    const sum = P_SPLIT_FIELDS.reduce((x,f)=>x+a[f],0);
+    const diff = total - sum;
+    if (Math.abs(diff) <= 0.01) { lbl.textContent = 'Total ' + fmt(total) + ' — fully allocated ✓'; lbl.style.color = 'var(--green, #16a34a)'; }
+    else if (diff > 0) { lbl.textContent = 'Total ' + fmt(total) + ' — still to allocate: ' + fmt(diff); lbl.style.color = 'var(--red, #dc2626)'; }
+    else { lbl.textContent = 'Total ' + fmt(total) + ' — over-allocated by ' + fmt(-diff); lbl.style.color = 'var(--red, #dc2626)'; }
+  }
+  function resetPurchaseSplitPanel(){
+    const t=document.getElementById('p-split-toggle'); if(t) t.checked=false;
+    const pn=document.getElementById('p-split-panel'); if(pn) pn.classList.add('hidden');
+    const ac=document.getElementById('p-account'); if(ac) ac.disabled=false;
+    P_SPLIT_FIELDS.forEach(f=>{ const el=document.getElementById('p-split-'+f); if(el) el.value=''; });
+    updatePurchaseSplitRemaining();
   }
 
   async function commitPurchaseReceipt() {
@@ -4713,6 +4827,41 @@
 
     const items = state.stagedPurchaseItems.slice();
     const receiptId = nextId();
+
+    if (document.getElementById('p-split-toggle') && document.getElementById('p-split-toggle').checked) {
+      const total = purchaseReceiptTotal();
+      const a = readSplit('p-split-', P_SPLIT_FIELDS);
+      const sum = P_SPLIT_FIELDS.reduce((x,f)=>x+a[f],0);
+      if (Math.abs(sum - total) > 0.01) {
+        alert('Purchases must be fully paid — no debt allowed. Split amounts total ' + fmt(sum) + ' but the receipt is ' + fmt(total) + '.');
+        return;
+      }
+      const itemsDesc = items.map(it => `${it.item} x${it.qty}`).join(', ');
+      const portions = P_SPLIT_FIELDS.filter(f => a[f] > 0);
+      try {
+        for (const f of portions) {
+          if (isServerMode()) {
+            const created = await apiRequest('/api/purchases', {
+              method: 'POST',
+              body: JSON.stringify({ receipt_id: receiptId, date, item: itemsDesc, category: 'General', supplier, account: f, qty: 1, cost: a[f] })
+            });
+            state.purchases.unshift({ id: created.id, receiptId: created.receipt_id, date: created.date, item: created.item, supplier: created.supplier, account: created.account, category: created.category, qty: created.qty, cost: created.cost });
+          } else {
+            state.purchases.unshift({ id: nextId(), receiptId, date, item: itemsDesc, supplier, account: f, category: 'General', qty: 1, cost: a[f] });
+          }
+        }
+      } catch (err) {
+        alert('Could not save to server: ' + (err.message || 'unknown error'));
+        return;
+      }
+      state.stagedPurchaseItems = [];
+      renderStagedPurchaseReceipt();
+      resetPurchaseSplitPanel();
+      saveStateToStorage();
+      renderAll();
+      alert('Purchase receipt submitted successfully (split across ' + portions.length + ' account' + (portions.length>1?'s':'') + ')!');
+      return;
+    }
 
     if (isServerMode()) {
       try {
@@ -4786,6 +4935,7 @@
     if (state.stagedSalesItems.length === 0) {
       body.innerHTML = '<tr class="empty-row"><td colspan="5">No items added to current receipt yet.</td></tr>';
       totEl.textContent = 'KSh 0';
+      updateSalesSplitRemaining();
       return;
     }
 
@@ -4802,6 +4952,34 @@
     }).join('');
 
     totEl.textContent = fmt(tot);
+    updateSalesSplitRemaining();
+  }
+
+  // ---- Split payment helpers (Sales) ----
+  const S_SPLIT_FIELDS = ['pochi','mpesa','cash','moneybox','debt'];
+  function salesReceiptTotal(){ return state.stagedSalesItems.reduce((a,it)=>a+it.total,0); }
+  function toggleSalesSplitPayment(){
+    const on = document.getElementById('s-split-toggle').checked;
+    document.getElementById('s-split-panel').classList.toggle('hidden', !on);
+    document.getElementById('s-account').disabled = on;
+    updateSalesSplitRemaining();
+  }
+  function updateSalesSplitRemaining(){
+    const lbl = document.getElementById('s-split-remaining-label'); if(!lbl) return;
+    const total = salesReceiptTotal();
+    const a = readSplit('s-split-', S_SPLIT_FIELDS);
+    const sum = S_SPLIT_FIELDS.reduce((x,f)=>x+a[f],0);
+    const diff = total - sum;
+    if (Math.abs(diff) <= 0.01) { lbl.textContent = 'Total ' + fmt(total) + ' — fully allocated ✓'; lbl.style.color = 'var(--green, #16a34a)'; }
+    else if (diff > 0) { lbl.textContent = 'Total ' + fmt(total) + ' — still to allocate: ' + fmt(diff); lbl.style.color = 'var(--red, #dc2626)'; }
+    else { lbl.textContent = 'Total ' + fmt(total) + ' — over-allocated by ' + fmt(-diff); lbl.style.color = 'var(--red, #dc2626)'; }
+  }
+  function resetSalesSplitPanel(){
+    const t=document.getElementById('s-split-toggle'); if(t) t.checked=false;
+    const pn=document.getElementById('s-split-panel'); if(pn) pn.classList.add('hidden');
+    const ac=document.getElementById('s-account'); if(ac) ac.disabled=false;
+    S_SPLIT_FIELDS.forEach(f=>{ const el=document.getElementById('s-split-'+f); if(el) el.value=''; });
+    updateSalesSplitRemaining();
   }
 
   async function commitSalesReceipt() {
@@ -4820,6 +4998,65 @@
     }
 
     const items = state.stagedSalesItems.slice();
+
+    if (document.getElementById('s-split-toggle') && document.getElementById('s-split-toggle').checked) {
+      const receiptTotal = salesReceiptTotal();
+      const a = readSplit('s-split-', S_SPLIT_FIELDS);
+      const sum = S_SPLIT_FIELDS.reduce((x,f)=>x+a[f],0);
+      if (Math.abs(sum - receiptTotal) > 0.01) {
+        alert('Split amounts total ' + fmt(sum) + ' but the receipt is ' + fmt(receiptTotal) + '. They must match exactly.');
+        return;
+      }
+      const receiptId = nextId();
+      const itemsDesc = items.map(it => `${it.item} x${it.qty}`).join(', ');
+      const splitBreakdown = [];
+      try {
+        for (const f of ['pochi','mpesa','cash','moneybox']) {
+          if (a[f] <= 0) continue;
+          if (isServerMode()) {
+            const created = await apiRequest('/api/sales', {
+              method: 'POST',
+              body: JSON.stringify({ receipt_id: receiptId, date, item: itemsDesc, customer, account: f, qty: 1, price: a[f] })
+            });
+            state.sales.unshift({ id: created.id, receiptId: created.receipt_id, date: created.date, item: created.item, customer: created.customer, account: created.account, qty: created.qty, price: created.price });
+          } else {
+            state.sales.unshift({ id: nextId(), receiptId, date, item: itemsDesc, customer, account: f, qty: 1, price: a[f] });
+          }
+          splitBreakdown.push({ label: accountLabels[f], amount: a[f] });
+        }
+        if (a.debt > 0) {
+          if (isServerMode()) {
+            const created = await apiRequest('/api/credit-sales', {
+              method: 'POST',
+              body: JSON.stringify({ receipt_id: receiptId, date, customer, item: itemsDesc, qty: 1, price: a.debt })
+            });
+            state.creditSales.unshift({
+              id: created.id, receiptId: created.receipt_id, date: created.date, customer: created.customer,
+              item: created.item, qty: created.qty, price: created.price, total: created.total,
+              paid: created.paid, remaining: created.remaining, payments: []
+            });
+          } else {
+            state.creditSales.unshift({
+              id: nextId(), receiptId, date, customer, item: itemsDesc, qty: 1, price: a.debt,
+              total: a.debt, paid: 0, remaining: a.debt, payments: []
+            });
+          }
+          splitBreakdown.push({ label: 'Debt (Credit)', amount: a.debt });
+        }
+      } catch (err) {
+        alert('Could not save to server: ' + (err.message || 'unknown error'));
+        return;
+      }
+      const committed = items.map(it => ({ item: it.item, qty: it.qty, price: it.price, total: it.qty * it.price }));
+      state.stagedSalesItems = [];
+      renderStagedSalesReceipt();
+      saveDraftSalesItems();
+      resetSalesSplitPanel();
+      saveStateToStorage();
+      renderAll();
+      openReceiptModal({ receiptId, date, customer, account: 'split', splitBreakdown, items: committed });
+      return;
+    }
 
     if (account === 'credit') {
       const receiptId = nextId();
@@ -4907,6 +5144,22 @@
       ? state.sales.filter(s => s.receiptId === sale.receiptId)
       : [sale];
 
+    const accts = new Set(group.map(s => s.account));
+    const debtParts = sale.receiptId ? state.creditSales.filter(c => c.receiptId === sale.receiptId) : [];
+    if (sale.receiptId && (accts.size > 1 || debtParts.length)) {
+      const breakdown = [];
+      group.forEach(s => breakdown.push({ label: accountLabels[s.account] || s.account, amount: s.qty * s.price }));
+      debtParts.forEach(c => breakdown.push({ label: 'Debt (Credit)', amount: c.total }));
+      const names = [...new Set(group.map(s => s.item))].join(', ');
+      const grand = breakdown.reduce((x, b) => x + b.amount, 0);
+      openReceiptModal({
+        receiptId: sale.receiptId, date: sale.date, customer: sale.customer, account: 'split',
+        splitBreakdown: breakdown,
+        items: [{ item: debtParts.length ? (debtParts[0].item) : names, qty: 1, price: grand, total: grand }]
+      });
+      return;
+    }
+
     openReceiptModal({
       receiptId: sale.receiptId || sale.id,
       date: sale.date,
@@ -4949,7 +5202,7 @@
       <div class="rp-meta-row"><span>Receipt No.</span><span>${receiptNumber(data.receiptId)}</span></div>
       <div class="rp-meta-row"><span>Date</span><span>${data.date}</span></div>
       <div class="rp-meta-row"><span>Customer</span><span>${data.customer || 'Walk-in'}</span></div>
-      <div class="rp-meta-row"><span>Paid Via</span><span>${accountLabels[data.account || 'cash']}</span></div>
+      ${(data.splitBreakdown && data.splitBreakdown.length) ? data.splitBreakdown.map(p => `<div class="rp-meta-row"><span>Paid via ${p.label}</span><span>${fmt(p.amount)}</span></div>`).join('') : `<div class="rp-meta-row"><span>Paid Via</span><span>${accountLabels[data.account || 'cash']}</span></div>`}
       <hr class="rp-divider">
       <table>
         <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Total</th></tr></thead>
@@ -5215,36 +5468,91 @@
     const totalCost = filtered.reduce((sum, p) => sum + (p.qty * p.cost), 0);
     document.getElementById('purchases-total').textContent = fmt(totalCost);
 
+    const groups = groupByReceipt(filtered, 'p');
+
     const pageSize = state.purchasesPageSize;
-    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    const totalPages = Math.max(1, Math.ceil(groups.length / pageSize));
     if (state.purchasesPage > totalPages) state.purchasesPage = totalPages;
     if (state.purchasesPage < 1) state.purchasesPage = 1;
 
     const start = (state.purchasesPage - 1) * pageSize;
-    const pageItems = filtered.slice(start, start + pageSize);
+    const pageGroups = groups.slice(start, start + pageSize);
 
     document.getElementById('p-page-info').textContent = `Page ${state.purchasesPage} of ${totalPages}`;
     document.getElementById('p-prev-btn').disabled = state.purchasesPage <= 1;
     document.getElementById('p-next-btn').disabled = state.purchasesPage >= totalPages;
 
     const body = document.getElementById('purchases-body');
-    if (pageItems.length === 0) {
+    if (pageGroups.length === 0) {
       body.innerHTML = '<tr class="empty-row"><td colspan="8">No purchases match criteria.</td></tr>';
       return;
     }
 
-    body.innerHTML = pageItems.map(p => `
-      <tr>
-        <td>${p.date}</td>
-        <td><strong>${p.item}</strong></td>
-        <td>${p.supplier || '—'}</td>
+    body.innerHTML = pageGroups.map(g => {
+      const total = g.rows.reduce((x, r) => x + r.qty * r.cost, 0);
+      const open = expandedReceipts.has(g.key);
+      const accts = [...new Set(g.rows.map(r => r.account || 'cash'))];
+      const acctLabel = accts.length > 1 ? 'Split Payment' : accountLabels[accts[0]];
+      const first = g.rows[0];
+      const head = `
+      <tr class="receipt-group-row" style="cursor:pointer;" onclick="toggleReceiptGroup('${g.key}','p')">
+        <td>${first.date}</td>
+        <td><strong>${open ? '▾' : '▸'} ${g.rows.length} item${g.rows.length !== 1 ? 's' : ''}</strong></td>
+        <td><strong>${first.supplier || '—'}</strong></td>
+        <td>${acctLabel}</td>
+        <td class="num mono">${g.rows.reduce((x, r) => x + r.qty, 0)}</td>
+        <td class="num mono">—</td>
+        <td class="num mono">${fmt(total)}</td>
+        <td style="text-align:center; white-space:nowrap;" onclick="event.stopPropagation()">
+          ${g.rows.length > 1 ? `<button class="row-del" onclick="deleteReceiptGroup('p','${g.key}')" title="Delete whole receipt">✕</button>` : `<button class="row-edit" onclick="editPurchase(${first.id})" title="Edit">✏</button><button class="row-del" onclick="deletePurchase(${first.id})">✕</button>`}
+        </td>
+      </tr>`;
+      if (!open) return head;
+      return head + g.rows.map(p => `
+      <tr style="background:rgba(127,127,127,.07);">
+        <td></td>
+        <td style="padding-left:28px;">${p.item}</td>
+        <td></td>
         <td>${accountLabels[p.account || 'cash']}</td>
         <td class="num mono">${p.qty}</td>
         <td class="num mono">${fmt(p.cost)}</td>
         <td class="num mono">${fmt(p.qty * p.cost)}</td>
         <td style="text-align:center;"><button class="row-edit" onclick="editPurchase(${p.id})" title="Edit">✏</button><button class="row-del" onclick="deletePurchase(${p.id})">✕</button></td>
-      </tr>
-    `).join('');
+      </tr>`).join('');
+    }).join('');
+  }
+
+  // ---- Group records into one row per receipt (customer/supplier) ----
+  const expandedReceipts = new Set();
+  function groupByReceipt(list, prefix) {
+    const map = new Map(); const out = [];
+    list.forEach(r => {
+      const key = prefix + (r.receiptId ? 'r' + r.receiptId : 'i' + r.id);
+      let g = map.get(key);
+      if (!g) { g = { key, rows: [] }; map.set(key, g); out.push(g); }
+      g.rows.push(r);
+    });
+    return out;
+  }
+  function toggleReceiptGroup(key, kind) {
+    if (expandedReceipts.has(key)) expandedReceipts.delete(key); else expandedReceipts.add(key);
+    if (kind === 'p') renderPurchases(); else renderSales();
+  }
+  async function deleteReceiptGroup(kind, key) {
+    const arr = kind === 'p' ? state.purchases : state.sales;
+    const rows = arr.filter(r => (kind + (r.receiptId ? 'r' + r.receiptId : 'i' + r.id)) === key);
+    if (!rows.length) return;
+    if (!confirm(`Delete this whole receipt (${rows.length} records)?`)) return;
+    const url = kind === 'p' ? '/api/purchases/' : '/api/sales/';
+    if (isServerMode()) {
+      try { for (const r of rows) await apiRequest(url + r.id, { method: 'DELETE' }); }
+      catch (err) { alert('Could not delete on server: ' + (err.message || 'unknown error')); return; }
+    }
+    const ids = new Set(rows.map(r => r.id));
+    if (kind === 'p') state.purchases = state.purchases.filter(r => !ids.has(r.id));
+    else state.sales = state.sales.filter(r => !ids.has(r.id));
+    saveStateToStorage();
+    renderAll();
   }
 
   function renderSales() {
@@ -5271,40 +5579,61 @@
       }
     }
 
+    const groups = groupByReceipt(filtered, 's');
     const pageSize = state.salesPageSize;
-    const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+    const totalPages = Math.max(1, Math.ceil(groups.length / pageSize));
     if (state.salesPage > totalPages) state.salesPage = totalPages;
     if (state.salesPage < 1) state.salesPage = 1;
 
     const start = (state.salesPage - 1) * pageSize;
-    const pageItems = filtered.slice(start, start + pageSize);
+    const pageGroups = groups.slice(start, start + pageSize);
 
     document.getElementById('s-page-info').textContent = `Page ${state.salesPage} of ${totalPages}`;
     document.getElementById('s-prev-btn').disabled = state.salesPage <= 1;
     document.getElementById('s-next-btn').disabled = state.salesPage >= totalPages;
 
     const body = document.getElementById('sales-body');
-    if (pageItems.length === 0) {
+    if (pageGroups.length === 0) {
       body.innerHTML = '<tr class="empty-row"><td colspan="8">No sales match criteria.</td></tr>';
       return;
     }
 
-    body.innerHTML = pageItems.map(s => `
-      <tr>
-        <td>${s.date}</td>
-        <td><strong>${s.item}</strong></td>
-        <td>${s.customer || 'Walk-in'}</td>
-        <td>${accountLabels[s.account || 'cash']}</td>
-        <td class="num mono">${s.qty}</td>
-        <td class="num mono">${fmt(s.price)}</td>
-        <td class="num mono green">${fmt(s.qty * s.price)}</td>
-        <td style="text-align:center; white-space:nowrap;">
-          <button class="row-del row-print" onclick="viewReceiptForSale(${s.id})" title="View / Print Receipt">🖨</button>
-          <button class="row-edit" onclick="editSale(${s.id})" title="Edit">✏</button>
-          <button class="row-del" onclick="deleteSale(${s.id})" title="Delete">✕</button>
+    body.innerHTML = pageGroups.map(g => {
+      const total = g.rows.reduce((x, r) => x + r.qty * r.price, 0);
+      const open = expandedReceipts.has(g.key);
+      const accts = [...new Set(g.rows.map(r => r.account || 'cash'))];
+      const acctLabel = accts.length > 1 ? 'Split Payment' : accountLabels[accts[0]];
+      const first = g.rows[0];
+      const head = `
+      <tr class="receipt-group-row" style="cursor:pointer;" onclick="toggleReceiptGroup('${g.key}','s')">
+        <td>${first.date}</td>
+        <td><strong>${open ? '▾' : '▸'} ${g.rows.length} item${g.rows.length !== 1 ? 's' : ''}</strong></td>
+        <td><strong>${first.customer || 'Walk-in'}</strong></td>
+        <td>${acctLabel}</td>
+        <td class="num mono">${g.rows.reduce((x, r) => x + r.qty, 0)}</td>
+        <td class="num mono">—</td>
+        <td class="num mono green">${fmt(total)}</td>
+        <td style="text-align:center; white-space:nowrap;" onclick="event.stopPropagation()">
+          <button class="row-del row-print" onclick="viewReceiptForSale(${first.id})" title="View / Print Receipt">🖨</button>
+          ${g.rows.length > 1 ? `<button class="row-del" onclick="deleteReceiptGroup('s','${g.key}')" title="Delete whole receipt">✕</button>` : `<button class="row-edit" onclick="editSale(${first.id})" title="Edit">✏</button><button class="row-del" onclick="deleteSale(${first.id})" title="Delete">✕</button>`}
         </td>
-      </tr>
-    `).join('');
+      </tr>`;
+      if (!open) return head;
+      return head + g.rows.map(r => `
+      <tr style="background:rgba(127,127,127,.07);">
+        <td></td>
+        <td style="padding-left:28px;">${r.item}</td>
+        <td></td>
+        <td>${accountLabels[r.account || 'cash']}</td>
+        <td class="num mono">${r.qty}</td>
+        <td class="num mono">${fmt(r.price)}</td>
+        <td class="num mono green">${fmt(r.qty * r.price)}</td>
+        <td style="text-align:center; white-space:nowrap;">
+          <button class="row-edit" onclick="editSale(${r.id})" title="Edit">✏</button>
+          <button class="row-del" onclick="deleteSale(${r.id})" title="Delete">✕</button>
+        </td>
+      </tr>`).join('');
+    }).join('');
   }
 
   // ---------------------------------------------------------------
