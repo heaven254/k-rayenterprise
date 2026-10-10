@@ -989,12 +989,6 @@
 
   <div class="auth-form-side">
     <div class="auth-card">
-      <div class="server-status-bar" id="server-status-bar" onclick="openServerSettings()">
-        <span id="server-status-dot" class="server-status-dot offline"></span>
-        <span id="server-status-text">Offline mode — data stays on this device</span>
-        <span class="server-status-edit">⚙ Configure</span>
-      </div>
-
       <div class="auth-tabs" id="auth-tab-bar">
         <button class="auth-tab active" id="tab-login-btn" onclick="switchAuthTab('login')">Log In</button>
         <button class="auth-tab" id="tab-signup-btn" onclick="switchAuthTab('signup')">Sign Up</button>
@@ -1048,8 +1042,6 @@
           </div>
           <button type="submit" class="btn btn-primary" style="width:100%;" id="login-submit-btn">Log In</button>
         </form>
-        <div class="auth-divider">OR</div>
-        <div class="demo-link">No account yet? <button onclick="loadDemoData()">Explore with demo data</button></div>
       </div>
 
       <!-- ADMIN EMAIL VERIFICATION -->
@@ -2593,7 +2585,11 @@
   // mode with NO hardcoded server URL, so there's never a stale or
   // wrong endpoint baked into the page.
   // ---------------------------------------------------------------
-  let API_BASE_URL = localStorage.getItem('kray_api_base_url') || '';
+  // The app always runs against the live server. When the page is served by the backend
+  // (the normal case) that is simply this site; if the file is opened from disk, use the live address.
+  const LIVE_SERVER_URL = 'https://k-ray-enterprise.co.ke';
+  try { localStorage.removeItem('kray_api_base_url'); } catch (e) {}
+  let API_BASE_URL = /^https?:$/.test(location.protocol) ? location.origin : LIVE_SERVER_URL;
   let authToken = localStorage.getItem('kray_auth_token') || null;
 
   function isServerMode() {
