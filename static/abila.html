@@ -1027,16 +1027,8 @@
         <div class="auth-error" id="login-error"></div>
         
         <!-- Google Sign-In Button -->
-        <div class="google-btn-wrapper">
-          <div id="g_id_onload"
-               data-client_id="YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com"
-               data-callback="handleGoogleSignIn"
-               data-auto_prompt="false">
-          </div>
-          <div class="g_id_signin" data-type="standard" data-size="large" data-theme="outline" data-text="sign_in_with" data-shape="rectangular" data-logo_alignment="left"></div>
-        </div>
-
-        <div class="auth-divider">OR WITH EMAIL</div>
+        <div class="google-btn-wrapper hidden" id="google-wrap-login"><div id="google-btn-login"></div></div>
+        <div class="auth-divider hidden" id="google-div-login">OR WITH EMAIL</div>
 
         <form onsubmit="handleLogin(event)">
           <div class="field">
@@ -1067,7 +1059,8 @@
         <div class="auth-error" id="admin-verify-error"></div>
 
         <div class="verify-demo-box" id="admin-verify-demo">
-          Demo mode — no real email is sent. Your code is <b id="admin-verify-code-display"></b>
+          Email could not be sent, so your code is shown here: <b id="admin-verify-code-display"></b>
+          <div id="admin-verify-mail-error" style="font-size:11px; opacity:.75; margin-top:6px; word-break:break-word;"></div>
         </div>
 
         <form onsubmit="handleAdminVerify(event)">
@@ -1091,15 +1084,32 @@
       <!-- FORGOT PASSWORD -->
       <div class="auth-panel hidden" id="panel-forgot">
         <h2>Reset Password</h2>
-        <div class="sub">Enter your email to receive recovery instructions.</div>
+        <div class="sub">Enter your email and we will send a 6-digit reset code.</div>
         <div class="auth-error" id="forgot-error"></div>
         <form onsubmit="handleForgotPassword(event)">
           <div class="field">
             <label>Email Address</label>
             <input type="email" id="forgot-email" placeholder="you@company.com" required>
           </div>
-          <button type="submit" class="btn btn-primary" style="width:100%;">Send Reset Instructions</button>
+          <button type="submit" class="btn btn-primary" style="width:100%;" id="forgot-send-btn">Send Reset Code</button>
         </form>
+        <div id="forgot-step2" class="hidden" style="margin-top:16px;">
+          <div class="verify-demo-box hidden" id="forgot-demo" style="display:block;">
+            Email could not be sent, so your code is shown here: <b id="forgot-demo-code"></b>
+            <div id="forgot-mail-error" style="font-size:11px; opacity:.75; margin-top:6px; word-break:break-word;"></div>
+          </div>
+          <form onsubmit="handleResetPassword(event)">
+            <div class="field">
+              <label>6-digit code from your email</label>
+              <input type="text" id="forgot-code" inputmode="numeric" maxlength="6" placeholder="123456" required>
+            </div>
+            <div class="field">
+              <label>New Password</label>
+              <input type="password" id="forgot-new-password" placeholder="At least 8 characters" required minlength="8">
+            </div>
+            <button type="submit" class="btn btn-primary" style="width:100%;">Set New Password & Log In</button>
+          </form>
+        </div>
         <div style="margin-top: 18px; text-align: center;">
           <button type="button" class="link-btn" onclick="switchAuthTab('login')">Back to Log In</button>
         </div>
@@ -1112,11 +1122,8 @@
         <div class="auth-error" id="signup-error"></div>
         
         <!-- Google Sign-Up Option -->
-        <div class="google-btn-wrapper">
-          <div class="g_id_signin" data-type="standard" data-size="large" data-theme="outline" data-text="signup_with" data-shape="rectangular" data-logo_alignment="left"></div>
-        </div>
-
-        <div class="auth-divider">OR WITH EMAIL</div>
+        <div class="google-btn-wrapper hidden" id="google-wrap-signup"><div id="google-btn-signup"></div></div>
+        <div class="auth-divider hidden" id="google-div-signup">OR WITH EMAIL</div>
 
         <form onsubmit="handleSignup(event)">
           <div class="field">
@@ -1741,6 +1748,34 @@
           <table>
             <thead><tr><th>#</th><th>Item</th><th class="num">Qty Moved</th><th>Movement</th></tr></thead>
             <tbody id="st-product-movement"><tr class="empty-row"><td colspan="4">No sales in this period.</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- BEST CUSTOMERS -->
+      <div class="card">
+        <div class="card-head">
+          <div><h3>Best Customers</h3><div class="sub" id="st-cust-sub">Ranked by what they bought (cash sales + goods on credit)</div></div>
+        </div>
+        <div class="filter-row" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
+          <select id="st-cust-range" onchange="renderTopCustomers()" style="padding:8px 10px; border-radius:8px; border:1px solid var(--line); background:transparent; color:inherit; font:inherit;">
+            <option value="month">This month</option>
+            <option value="30">Last 30 days</option>
+            <option value="90" selected>Last 90 days</option>
+            <option value="year">This year</option>
+            <option value="all">All time</option>
+          </select>
+          <select id="st-cust-filter" onchange="renderTopCustomers()" style="padding:8px 10px; border-radius:8px; border:1px solid var(--line); background:transparent; color:inherit; font:inherit;">
+            <option value="all">All customers</option>
+            <option value="inactive">Not bought in 30+ days</option>
+            <option value="owing">Owing a loan</option>
+          </select>
+          <input type="text" id="st-cust-search" placeholder="Search customer..." oninput="renderTopCustomers()" style="flex:1; min-width:140px; padding:8px 10px; border-radius:8px; border:1px solid var(--line); background:transparent; color:inherit; font:inherit;">
+        </div>
+        <div class="table-container">
+          <table>
+            <thead><tr><th>#</th><th>Customer</th><th class="num">Orders</th><th class="num">Spent</th><th>Last Bought</th><th class="num">Owes</th></tr></thead>
+            <tbody id="st-top-customers"><tr class="empty-row"><td colspan="6">No customer sales in this period.</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -2445,6 +2480,20 @@
 
         <div class="card">
           <div class="card-head">
+            <div><h3>💾 Backup & Restore</h3><div class="sub">Download all your business data as a file, or restore it from one</div></div>
+          </div>
+          <div id="backup-last" class="sub" style="margin-bottom:12px;"></div>
+          <button class="btn btn-primary" style="width:100%; margin-bottom:12px;" onclick="downloadBackup()">⬇ Download Full Backup</button>
+          <div class="field">
+            <label>Restore from a backup file</label>
+            <input type="file" id="backup-file" accept=".json,application/json" onchange="restoreFromBackupFile(event)">
+          </div>
+          <div class="sub">Restoring <strong>replaces</strong> all current sales, purchases, stock, loans, expenses and Pumice records with the file's contents. A safety copy of your current data is downloaded first.</div>
+          <div class="auth-error" id="backup-msg" style="display:none; margin-top:12px;"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
             <div><h3>Workspace Comments & Notes</h3><div class="sub">Leave notes, reminders, or feedback</div></div>
           </div>
           <form onsubmit="addComment(event)">
@@ -3090,23 +3139,40 @@
     }
   }
 
-  function handleGoogleSignIn(response) {
-    const payload = parseJwt(response.credential);
-    if (!payload) {
-      showError('login-error', 'Google Sign-In failed. Please try again.');
-      return;
+  async function handleGoogleSignIn(response) {
+    const errId = document.getElementById('panel-signup').classList.contains('hidden') ? 'login-error' : 'signup-error';
+    if (!response || !response.credential) { showError(errId, 'Google Sign-In failed. Please try again.'); return; }
+    try {
+      const body = await apiRequest('/api/auth/google', { method: 'POST', body: JSON.stringify({ credential: response.credential }) });
+      authToken = body.token;
+      localStorage.setItem('kray_auth_token', authToken);
+      state.currentUser = { name: body.user.name, business: body.user.business, email: body.user.email, avatarUrl: body.user.avatarUrl || '' };
+      enterDashboard();
+    } catch (err) {
+      showError(errId, err.message || 'Google Sign-In failed. Please try again.');
     }
-    const email = payload.email.toLowerCase();
-    const name = payload.name || payload.given_name || 'Google User';
+  }
 
-    let user = state.users.find(u => u.email === email);
-    if (!user) {
-      user = { name: name, business: name + ' Workspace', email: email, password: '', avatarUrl: payload.picture || '' };
-      state.users.push(user);
-    }
-    state.currentUser = user;
-    saveStateToStorage();
-    enterDashboard();
+  // Shows the Google buttons only when the server has a Google Client ID configured.
+  let googleInitDone = false;
+  async function initGoogleSignIn(attempt) {
+    if (googleInitDone || !isServerMode()) return;
+    attempt = attempt || 0;
+    try {
+      const cfg = await apiRequest('/api/auth/config');
+      if (!cfg || !cfg.google_client_id) return;
+      if (!(window.google && google.accounts && google.accounts.id)) {
+        if (attempt < 20) setTimeout(() => initGoogleSignIn(attempt + 1), 500);
+        return;
+      }
+      google.accounts.id.initialize({ client_id: cfg.google_client_id, callback: handleGoogleSignIn, auto_select: false });
+      [['login', 'signin_with'], ['signup', 'signup_with']].forEach(([k, text]) => {
+        google.accounts.id.renderButton(document.getElementById('google-btn-' + k), { type: 'standard', size: 'large', theme: 'outline', text, shape: 'rectangular', logo_alignment: 'left' });
+        document.getElementById('google-wrap-' + k).classList.remove('hidden');
+        document.getElementById('google-div-' + k).classList.remove('hidden');
+      });
+      googleInitDone = true;
+    } catch (e) { /* server unreachable or old backend: simply no Google button */ }
   }
 
   // ---------------------------------------------------------------
@@ -3134,11 +3200,52 @@
     el.style.display = 'block';
   }
 
-  function handleForgotPassword(e){
+  let pendingResetVerificationId = null;
+  async function handleForgotPassword(e){
     e.preventDefault();
-    const email = document.getElementById('forgot-email').value.trim();
-    alert(`Password recovery link and instructions sent to: ${email}`);
-    switchAuthTab('login');
+    const email = document.getElementById('forgot-email').value.trim().toLowerCase();
+    if (!isServerMode()) {
+      showError('forgot-error', 'Password reset by email needs the online server. In offline mode, use your vault password.');
+      return;
+    }
+    const btn = document.getElementById('forgot-send-btn'); btn.disabled = true;
+    try {
+      const body = await apiRequest('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) });
+      document.getElementById('forgot-error').style.display = 'none';
+      pendingResetVerificationId = body.verification_id || null;
+      document.getElementById('forgot-step2').classList.remove('hidden');
+      const demo = document.getElementById('forgot-demo');
+      if (body.demo_code) {
+        demo.classList.remove('hidden');
+        document.getElementById('forgot-demo-code').textContent = body.demo_code;
+        document.getElementById('forgot-mail-error').textContent = body.mail_error || '';
+      } else { demo.classList.add('hidden'); }
+      if (!body.verification_id) showError('forgot-error', 'If an account exists for this email, a reset code has been sent.');
+    } catch (err) {
+      showError('forgot-error', err.message || 'Could not start the password reset.');
+    }
+    btn.disabled = false;
+  }
+
+  async function handleResetPassword(e){
+    e.preventDefault();
+    if (!pendingResetVerificationId) { showError('forgot-error', 'Request a reset code for your email first.'); return; }
+    try {
+      const body = await apiRequest('/api/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({
+          verification_id: pendingResetVerificationId,
+          code: document.getElementById('forgot-code').value.trim(),
+          new_password: document.getElementById('forgot-new-password').value
+        })
+      });
+      authToken = body.token;
+      localStorage.setItem('kray_auth_token', authToken);
+      state.currentUser = { name: body.user.name, business: body.user.business, email: body.user.email, avatarUrl: body.user.avatarUrl || '' };
+      enterDashboard();
+    } catch (err) {
+      showError('forgot-error', err.message || 'Could not reset the password.');
+    }
   }
 
   async function handleSignup(e){
@@ -3161,7 +3268,7 @@
           body: JSON.stringify({ name, business, email, password: pass })
         });
         if (body.requires_verification) {
-          startVerification({ email: body.email, verificationId: body.verification_id, demoCode: body.demo_code });
+          startVerification({ email: body.email, verificationId: body.verification_id, demoCode: body.demo_code, mailError: body.mail_error });
           return;
         }
       } catch (err) {
@@ -3205,7 +3312,7 @@
           body: JSON.stringify({ email, password: pass })
         });
         if (body.requires_verification) {
-          startVerification({ email: body.email, verificationId: body.verification_id, demoCode: body.demo_code });
+          startVerification({ email: body.email, verificationId: body.verification_id, demoCode: body.demo_code, mailError: body.mail_error });
           return;
         }
         authToken = body.token;
@@ -3257,6 +3364,7 @@
       if (opts.demoCode) {
         document.getElementById('admin-verify-demo').classList.remove('hidden');
         document.getElementById('admin-verify-code-display').textContent = opts.demoCode;
+        document.getElementById('admin-verify-mail-error').textContent = opts.mailError || '';
       } else {
         document.getElementById('admin-verify-demo').classList.add('hidden');
       }
@@ -3278,6 +3386,9 @@
         if (body.demo_code) {
           document.getElementById('admin-verify-demo').classList.remove('hidden');
           document.getElementById('admin-verify-code-display').textContent = body.demo_code;
+          document.getElementById('admin-verify-mail-error').textContent = body.mail_error || '';
+        } else {
+          document.getElementById('admin-verify-demo').classList.add('hidden');
         }
       } catch (err) {
         showError('admin-verify-error', err.message || 'Could not resend code.');
@@ -3618,6 +3729,7 @@
     document.getElementById('topbar-title').textContent = sectionTitles[section][0];
     document.getElementById('topbar-sub').textContent = sectionTitles[section][1];
     if(section === 'activity') loadActivityLog();
+    if(section === 'profile') updateBackupLabel();
   }
 
   // ---------------------------------------------------------------
@@ -5599,6 +5711,94 @@
     if (kind === 'p') renderPurchases(); else renderSales();
   }
 
+
+  // ---------------------------------------------------------------
+  // BACKUP & RESTORE
+  // ---------------------------------------------------------------
+  function backupMsg(text, ok) {
+    const el = document.getElementById('backup-msg'); if (!el) return;
+    el.style.display = text ? 'block' : 'none';
+    el.textContent = text || '';
+    el.style.background = ok ? 'rgba(111,224,168,.1)' : '';
+    el.style.borderColor = ok ? 'rgba(111,224,168,.3)' : '';
+    el.style.color = ok ? 'var(--green, #6FE0A8)' : '';
+  }
+  function updateBackupLabel() {
+    const el = document.getElementById('backup-last'); if (!el) return;
+    let last = null; try { last = localStorage.getItem('kray_last_backup'); } catch (e) {}
+    if (!last) { el.textContent = '⚠ No backup has been downloaded from this device yet.'; el.style.color = 'var(--amber, #f5b942)'; return; }
+    const days = Math.floor((Date.now() - new Date(last).getTime()) / 86400000);
+    el.textContent = 'Last backup from this device: ' + new Date(last).toLocaleString() + (days >= 7 ? ' — ' + days + ' days ago, time for a new one' : '');
+    el.style.color = days >= 7 ? 'var(--amber, #f5b942)' : '';
+  }
+  function saveJsonFile(obj, filename) {
+    const blob = new Blob([JSON.stringify(obj)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob); a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  }
+  async function buildBackupObject() {
+    if (isServerMode()) return await apiRequest('/api/backup');
+    return { app: 'k-ray-enterprise', version: 1, local: true, created_at: new Date().toISOString(), state: currentStateSnapshot() };
+  }
+  async function downloadBackup(silentPrefix) {
+    try {
+      const data = await buildBackupObject();
+      const name = (silentPrefix || 'kray-backup') + '-' + new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-') + '.json';
+      saveJsonFile(data, name);
+      if (!silentPrefix) { try { localStorage.setItem('kray_last_backup', new Date().toISOString()); } catch (e) {} updateBackupLabel(); backupMsg('Backup downloaded: ' + name, true); }
+      return true;
+    } catch (err) {
+      backupMsg('Could not create the backup: ' + (err.message || 'unknown error'), false);
+      return false;
+    }
+  }
+  async function restoreFromBackupFile(ev) {
+    const input = ev.target; const file = input.files && input.files[0]; if (!file) return;
+    backupMsg('', true);
+    let data;
+    try { data = JSON.parse(await file.text()); } catch (e) { backupMsg('That file is not a valid backup (could not read it).', false); input.value = ''; return; }
+    if (!data || data.app !== 'k-ray-enterprise') { backupMsg('That file is not a K-Ray backup.', false); input.value = ''; return; }
+
+    const serverFile = !!data.tables, localFile = !!data.state;
+    if (isServerMode() && !serverFile) { backupMsg('This backup was made in offline/local mode and cannot be restored to the online database.', false); input.value = ''; return; }
+    if (!isServerMode() && !localFile) { backupMsg('This backup was made from the online database. Log in to the online server to restore it.', false); input.value = ''; return; }
+
+    const counts = serverFile ? data.tables : data.state;
+    const n = k => Array.isArray(counts[k]) ? counts[k].length : 0;
+    const summary = serverFile
+      ? `${n('sales')} sales, ${n('purchases')} purchases, ${n('credit_sales')} loan items, ${n('products')} products, ${n('expenses')} expenses, ${n('pumice')} Pumice records`
+      : `${n('sales')} sales, ${n('purchases')} purchases, ${n('creditSales')} loan items, ${n('products')} products, ${n('expenses')} expenses, ${n('pumice')} Pumice records`;
+    const when = data.created_at ? new Date(data.created_at).toLocaleString() : 'unknown date';
+    if (!confirm(`Restore backup from ${when}?\n\nIt contains: ${summary}.\n\nThis REPLACES everything currently saved. A safety copy of your current data will be downloaded first.`)) { input.value = ''; return; }
+    const typed = prompt('Type REPLACE to confirm the restore:');
+    if (typed !== 'REPLACE') { backupMsg('Restore cancelled — nothing was changed.', false); input.value = ''; return; }
+
+    if (!(await downloadBackup('kray-before-restore'))) { backupMsg('Restore stopped: could not save a safety copy first, so nothing was changed.', false); input.value = ''; return; }
+
+    try {
+      if (isServerMode()) {
+        const resp = await fetch(API_BASE_URL + '/api/restore', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + authToken },
+          body: JSON.stringify(Object.assign({}, data, { confirm: 'REPLACE' }))
+        });
+        let body = null; try { body = await resp.json(); } catch (e) {}
+        if (!resp.ok) throw new Error((body && body.error) || ('Restore failed: ' + resp.status));
+        await loadAllDataFromServer();
+      } else {
+        applyStateSnapshot(data.state);
+        saveStateToStorage();
+      }
+      renderAll();
+      backupMsg('Backup restored successfully.', true);
+    } catch (err) {
+      backupMsg('Restore failed: ' + (err.message || 'unknown error') + ' (your current data was kept).', false);
+    }
+    input.value = '';
+  }
+
   // ---------------------------------------------------------------
   // EDIT A WHOLE RECEIPT (sales or purchases)
   // ---------------------------------------------------------------
@@ -6157,6 +6357,58 @@
     netEl.textContent = fmt(pNet);
     netEl.classList.toggle('red', pNet < 0);
     document.getElementById('st-pumice-withdrawn').textContent = fmt(pWithdrawn);
+  }
+
+
+  // ---------------------------------------------------------------
+  // BEST CUSTOMERS
+  // ---------------------------------------------------------------
+  function renderTopCustomers() {
+    const body = document.getElementById('st-top-customers'); if (!body) return;
+    const range = document.getElementById('st-cust-range').value;
+    const filt = document.getElementById('st-cust-filter').value;
+    const q = document.getElementById('st-cust-search').value.toLowerCase().trim();
+    const now = new Date(); const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dayMs = 86400000;
+    let from = null;
+    if (range === 'month') from = new Date(now.getFullYear(), now.getMonth(), 1);
+    else if (range === 'year') from = new Date(now.getFullYear(), 0, 1);
+    else if (range !== 'all') from = new Date(today.getTime() - Number(range) * dayMs);
+    const fromStr = from ? from.toISOString().slice(0, 10) : '';
+
+    const norm = n => String(n || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const isWalkIn = n => { const k = norm(n); return !k || k === 'walk in' || k === 'walk-in' || k === 'walkin'; };
+    const map = new Map();
+    const get = (name) => { const k = norm(name); if (!map.has(k)) map.set(k, { name: String(name).trim(), spent: 0, orders: new Set(), last: '', owes: 0 }); return map.get(k); };
+    const addRec = (name, date, amount, receiptId, id) => {
+      if (isWalkIn(name)) return;
+      const c = get(name);
+      if (!c.last || date > c.last) c.last = date;       // last purchase uses ALL history
+      if (!fromStr || date >= fromStr) { c.spent += amount; c.orders.add((receiptId || 'i' + id) + '|' + date); }
+    };
+    state.sales.forEach(r => addRec(r.customer, r.date || '', r.qty * r.price, r.receiptId, r.id));
+    state.creditSales.forEach(r => { addRec(r.customer, r.date || '', Number(r.total || 0), r.receiptId, 'c' + r.id); if (!isWalkIn(r.customer)) get(r.customer).owes += Number(r.remaining || 0); });
+
+    let list = [...map.values()].filter(c => c.orders.size > 0 || filt !== 'all');
+    list.forEach(c => { c.daysAgo = c.last ? Math.floor((today - new Date(c.last)) / dayMs) : null; });
+    if (filt === 'inactive') list = list.filter(c => c.daysAgo !== null && c.daysAgo >= 30);
+    if (filt === 'owing') list = list.filter(c => c.owes > 0.005);
+    if (q) list = list.filter(c => c.name.toLowerCase().includes(q));
+    list.sort((a, b) => (filt === 'inactive') ? b.daysAgo - a.daysAgo : b.spent - a.spent);
+
+    if (!list.length) { body.innerHTML = '<tr class="empty-row"><td colspan="6">No customers match.</td></tr>'; return; }
+    body.innerHTML = list.slice(0, 100).map((c, i) => {
+      const stale = c.daysAgo !== null && c.daysAgo >= 30;
+      const lastTxt = c.last ? `${c.last}<div class="sub" style="${stale ? 'color:var(--amber,#f5b942);' : ''}">${c.daysAgo === 0 ? 'today' : c.daysAgo + ' day' + (c.daysAgo === 1 ? '' : 's') + ' ago'}${stale ? ' · inactive' : ''}</div>` : '—';
+      return `<tr>
+        <td>${i + 1}</td>
+        <td><strong>${reEsc(c.name)}</strong></td>
+        <td class="num mono">${c.orders.size}</td>
+        <td class="num mono green">${fmt(c.spent)}</td>
+        <td>${lastTxt}</td>
+        <td class="num mono ${c.owes > 0.005 ? 'red' : ''}">${c.owes > 0.005 ? fmt(c.owes) : '—'}</td>
+      </tr>`;
+    }).join('');
   }
 
   function renderMonthlyProductStats() {
@@ -6799,6 +7051,8 @@
   // ---------------------------------------------------------------
   // MASTER RENDER & INIT
   // ---------------------------------------------------------------
+  window.addEventListener('load', () => { initGoogleSignIn(); });
+
   function renderAll(){
     populateProductDropdowns();
     renderProductCatalog();
@@ -6810,6 +7064,7 @@
     renderCashAndTransfers();
     renderPumice();
     renderStatistics();
+    renderTopCustomers();
     renderBusinessToday();
     renderOverviewAndProfit();
     renderComments();
