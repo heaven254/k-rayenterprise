@@ -15,6 +15,9 @@ from db import init_db
 from routes_auth import bp as auth_bp
 from routes_resources import bp as resources_bp
 from routes_backup import bp as backup_bp
+from summary import bp as summary_bp, trigger_in_background
+from routes_backup import trigger_in_background as backup_trigger
+from routes_team import bp as team_bp
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -29,6 +32,8 @@ def create_app():
     app.register_blueprint(auth_bp)
     app.register_blueprint(resources_bp)
     app.register_blueprint(backup_bp)
+    app.register_blueprint(summary_bp)
+    app.register_blueprint(team_bp)
 
     # --- Manual CORS (no external dependency needed) ---------------------
     allowed_origin = os.environ.get("KRAY_CORS_ORIGIN", "*")
@@ -47,7 +52,30 @@ def create_app():
     # --- Health check -------------------------------------------------------
     @app.get("/api/health")
     def health():
+        trigger_in_background()
+        backup_trigger()   # sends the end-of-day summary once per day (see summary.py)
         return jsonify({"status": "ok", "service": "kray-enterprise-backend"})
+
+    # --- Phone-app (PWA) files: must live at the site root ------------------
+    PWA_FILES = {
+        "sw.js": "application/javascript",
+        "manifest.webmanifest": "application/manifest+json",
+        "icon-192.png": "image/png",
+        "icon-512.png": "image/png",
+        "icon-maskable-512.png": "image/png",
+        "apple-touch-icon.png": "image/png",
+    }
+
+    @app.get("/<path:filename>")
+    def pwa_file(filename):
+        if filename not in PWA_FILES or not os.path.exists(os.path.join(STATIC_DIR, filename)):
+            return jsonify({"error": "Not found"}), 404
+        resp = send_from_directory(STATIC_DIR, filename, mimetype=PWA_FILES[filename])
+        # the service worker must never be cached, or updates would never reach phones
+        resp.headers["Cache-Control"] = "no-cache" if filename == "sw.js" else "public, max-age=86400"
+        if filename == "sw.js":
+            resp.headers["Service-Worker-Allowed"] = "/"
+        return resp
 
     # --- Serve the frontend HTML file at the root URL ------------------------
     @app.get("/")

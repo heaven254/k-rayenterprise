@@ -159,6 +159,19 @@ CREATE TABLE IF NOT EXISTS stock_logs (
     comment         TEXT
 );
 
+CREATE TABLE IF NOT EXISTS reconciliations (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    date            TEXT NOT NULL,
+    account         TEXT NOT NULL,
+    expected        DOUBLE PRECISION NOT NULL,
+    counted         DOUBLE PRECISION NOT NULL,
+    difference      DOUBLE PRECISION NOT NULL,
+    note            TEXT,
+    checked_by      TEXT,
+    adjusted        BOOLEAN NOT NULL DEFAULT FALSE
+);
+
 CREATE TABLE IF NOT EXISTS comments (
     id              SERIAL PRIMARY KEY,
     user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -185,6 +198,31 @@ CREATE TABLE IF NOT EXISTS activity_log (
 # is safe to run repeatedly (IF NOT EXISTS everywhere).
 MIGRATIONS = """
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE TABLE IF NOT EXISTS product_price_history (
+    id          SERIAL PRIMARY KEY,
+    product_id  INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    field       TEXT NOT NULL,
+    old_value   DOUBLE PRECISION,
+    new_value   DOUBLE PRECISION NOT NULL,
+    changed_by  TEXT,
+    changed_at  TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS allowed_emails (
+    email     TEXT PRIMARY KEY,
+    added_by  TEXT,
+    added_at  TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS daily_summary_log (
+    day       TEXT PRIMARY KEY,
+    sent_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+    recipients INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS backup_email_log (
+    day       TEXT PRIMARY KEY,
+    sent_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+    recipients INTEGER NOT NULL DEFAULT 0
+);
 ALTER TABLE verifications DROP CONSTRAINT IF EXISTS verifications_purpose_check;
 ALTER TABLE pumice DROP CONSTRAINT IF EXISTS pumice_type_check;
 ALTER TABLE pumice ADD CONSTRAINT pumice_type_check CHECK (type IN ('sale','purchase','expense','withdrawal'));

@@ -186,6 +186,12 @@ register_simple_resource(
 )
 
 register_simple_resource(
+    "reconciliations", "reconciliations",
+    fields=["date", "account", "expected", "counted", "difference", "note", "checked_by", "adjusted"],
+    numeric_fields=("expected", "counted", "difference"),
+)
+
+register_simple_resource(
     "comments", "comments",
     fields=["author", "text", "date"],
 )
@@ -220,9 +226,27 @@ def create_product():
             (g.user_id, name, category, cost, price),
         )
         row = cur.fetchone()
+        for fld in ("cost", "price"):
+            cur.execute(
+                "INSERT INTO product_price_history (product_id, field, old_value, new_value, changed_by) VALUES (%s, %s, NULL, %s, %s)",
+                (row["id"], fld, row[fld], g.name))
         log_activity(cur, g.user_id, g.name, "created", "products", row["id"],
                      f"name: {row['name']}, price: {row['price']}")
     return jsonify(row_to_dict(row)), 201
+
+
+@bp.get("/products/price-history")
+@login_required
+def price_history():
+    """Every buying-cost / selling-price change, newest first (used to show history and to price backdated entries)."""
+    with db_cursor() as cur:
+        cur.execute("""SELECT product_id, field, old_value, new_value, changed_by, changed_at
+                       FROM product_price_history ORDER BY changed_at DESC, id DESC LIMIT 5000""")
+        rows = cur.fetchall()
+    out = rows_to_list(rows)
+    for r in out:
+        r["changed_at"] = r["changed_at"].isoformat() if r["changed_at"] else None
+    return jsonify(out)
 
 
 @bp.put("/products/<int:product_id>")
@@ -248,12 +272,18 @@ def update_product(product_id):
         return jsonify({"error": "No editable fields provided"}), 400
 
     with db_cursor(commit=True) as cur:
-        cur.execute("SELECT id FROM products WHERE id = %s", (product_id,))
-        if not cur.fetchone():
+        cur.execute("SELECT * FROM products WHERE id = %s", (product_id,))
+        before = cur.fetchone()
+        if not before:
             return jsonify({"error": "Product not found"}), 404
         values.append(product_id)
         cur.execute(f"UPDATE products SET {', '.join(set_clauses)} WHERE id = %s RETURNING *", values)
         row = cur.fetchone()
+        for fld in ("cost", "price"):
+            if fld in data and abs(float(row[fld]) - float(before[fld])) > 1e-9:
+                cur.execute(
+                    "INSERT INTO product_price_history (product_id, field, old_value, new_value, changed_by) VALUES (%s, %s, %s, %s, %s)",
+                    (product_id, fld, before[fld], row[fld], g.name))
         log_activity(cur, g.user_id, g.name, "updated", "products", product_id,
                      f"name: {row['name']}, price: {row['price']}")
     return jsonify(row_to_dict(row))

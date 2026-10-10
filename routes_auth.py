@@ -33,6 +33,18 @@ GOOGLE_CLIENT_ID = os.environ.get("KRAY_GOOGLE_CLIENT_ID", "").strip()
 ALLOWED_EMAILS = {e.strip().lower() for e in os.environ.get("KRAY_ALLOWED_EMAILS", "").split(",") if e.strip()}
 
 
+def allowed_set():
+    """Emails allowed to join: the Render list plus anyone the owner invited in the app."""
+    with db_cursor() as cur:
+        cur.execute("SELECT email FROM allowed_emails")
+        invited = {r["email"].lower() for r in cur.fetchall()}
+    return ALLOWED_EMAILS | invited
+
+
+def signup_restricted():
+    return bool(allowed_set())
+
+
 def _verify_google_token(credential):
     """Ask Google to validate the ID token. Returns its claims, or raises ValueError."""
     url = "https://oauth2.googleapis.com/tokeninfo?" + urllib.parse.urlencode({"id_token": credential})
@@ -101,7 +113,8 @@ def signup():
         return jsonify({"error": "name, email and password are required"}), 400
     if len(password) < 8:
         return jsonify({"error": "Password must be at least 8 characters"}), 400
-    if ALLOWED_EMAILS and email not in ALLOWED_EMAILS:
+    allowed = allowed_set()
+    if allowed and email not in allowed:
         return jsonify({"error": "This email is not allowed to create an account. Ask the business owner to add it."}), 403
 
     with db_cursor(commit=True) as cur:
@@ -143,6 +156,9 @@ def login():
 
     clear_rate_limit(email)
 
+    if user.get("disabled"):
+        return jsonify({"error": "This account has been disabled. Ask the business owner."}), 403
+
     if not user["email_verified"]:
         # Email was never confirmed after signup — send a fresh code
         # instead of letting them log in.
@@ -183,8 +199,10 @@ def google_login():
     with db_cursor(commit=True) as cur:
         cur.execute("SELECT * FROM users WHERE email = %s", (email,))
         user = cur.fetchone()
+        if user and user.get("disabled"):
+            return jsonify({"error": "This account has been disabled. Ask the business owner."}), 403
         if not user:
-            if email not in ALLOWED_EMAILS:
+            if email not in allowed_set():
                 return jsonify({"error": "No account exists for this Google email. Ask the business owner to add you."}), 403
             cur.execute(
                 "INSERT INTO users (name, business, email, password_hash, avatar_url, email_verified) "

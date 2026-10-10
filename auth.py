@@ -85,6 +85,28 @@ def _extract_token():
     return None
 
 
+_DISABLED_CACHE = {}   # user_id -> (checked_at, disabled)
+
+
+def is_disabled(user_id):
+    import time
+    from db import db_cursor
+    now = time.time()
+    hit = _DISABLED_CACHE.get(user_id)
+    if hit and now - hit[0] < 30:
+        return hit[1]
+    with db_cursor() as cur:
+        cur.execute("SELECT disabled FROM users WHERE id = %s", (user_id,))
+        row = cur.fetchone()
+    val = (row is None) or bool(row["disabled"])
+    _DISABLED_CACHE[user_id] = (now, val)
+    return val
+
+
+def forget_disabled(user_id):
+    _DISABLED_CACHE.pop(user_id, None)
+
+
 def login_required(fn):
     """Any authenticated user may proceed. Sets g.user_id, g.email."""
     @functools.wraps(fn)
@@ -102,5 +124,7 @@ def login_required(fn):
         g.user_id = int(payload["sub"])
         g.email = payload["email"]
         g.name = payload.get("name") or payload["email"]
+        if is_disabled(g.user_id):
+            return jsonify({"error": "This account has been disabled. Ask the business owner."}), 403
         return fn(*args, **kwargs)
     return wrapper
