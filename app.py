@@ -14,6 +14,7 @@ from flask import Flask, jsonify, send_from_directory
 from db import init_db
 from routes_auth import bp as auth_bp
 from routes_resources import bp as resources_bp
+from routes_backup import bp as backup_bp
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -27,6 +28,7 @@ def create_app():
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(resources_bp)
+    app.register_blueprint(backup_bp)
 
     # --- Manual CORS (no external dependency needed) ---------------------
     allowed_origin = os.environ.get("KRAY_CORS_ORIGIN", "*")
