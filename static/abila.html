@@ -2497,6 +2497,23 @@
           <div class="auth-error" id="team-msg" style="display:none; margin-top:12px;"></div>
           <div id="team-invites" style="margin-top:18px;"></div>
         </div>
+        <div class="card" id="owner-safety-card">
+          <div class="card-head">
+            <div><h3>🔒 Safety settings</h3><div class="sub">Only you, the owner, can change these</div></div>
+          </div>
+          <label style="display:flex; gap:10px; align-items:flex-start; cursor:pointer;">
+            <input type="checkbox" id="staff-can-delete" onchange="saveStaffDelete(this.checked)" style="margin-top:4px;">
+            <span><b>Staff can delete records</b><br><span class="sub">Turn off so only you can delete sales, purchases, expenses and other records. Staff can still add and edit.</span></span>
+          </label>
+          <div class="sub" style="margin-top:12px;">Backups, restoring data and managing the team are always owner-only. New devices must enter an emailed code the first time they sign in.</div>
+        </div>
+        <div class="card" id="owner-logins-card">
+          <div class="card-head">
+            <div><h3>🕵 Recent sign-ins</h3><div class="sub">Who tried to sign in, from where</div></div>
+            <button class="btn btn-secondary btn-small" onclick="loadLogins()">↻ Refresh</button>
+          </div>
+          <div id="logins-list" class="sub">Loading…</div>
+        </div>
       </div>
     </div>
 
@@ -2553,7 +2570,7 @@
           <div class="auth-error" id="summary-msg" style="display:none; margin-top:12px;"></div>
         </div>
 
-        <div class="card">
+        <div class="card" id="backup-card">
           <div class="card-head">
             <div><h3>💾 Backup & Restore</h3><div class="sub">Download all your business data as a file, or restore it from one</div></div>
           </div>
@@ -3125,7 +3142,7 @@
     if (!isServerMode() || !authToken) return false;
     try {
       const body = await apiRequest('/api/auth/me');
-      state.currentUser = { name: body.user.name, business: body.user.business, email: body.user.email, avatarUrl: body.user.avatarUrl || '' };
+      state.currentUser = { name: body.user.name, business: body.user.business, email: body.user.email, avatarUrl: body.user.avatarUrl || '', isOwner: !!body.user.isOwner };
       document.getElementById('vault-screen').classList.add('hidden');
       document.getElementById('auth-screen').classList.add('hidden');
       await enterDashboard();
@@ -3229,7 +3246,7 @@
       const body = await apiRequest('/api/auth/google', { method: 'POST', body: JSON.stringify({ credential: response.credential }) });
       authToken = body.token;
       localStorage.setItem('kray_auth_token', authToken);
-      state.currentUser = { name: body.user.name, business: body.user.business, email: body.user.email, avatarUrl: body.user.avatarUrl || '' };
+      state.currentUser = { name: body.user.name, business: body.user.business, email: body.user.email, avatarUrl: body.user.avatarUrl || '', isOwner: !!body.user.isOwner };
       enterDashboard();
     } catch (err) {
       showError(errId, err.message || 'Google Sign-In failed. Please try again.');
@@ -3324,7 +3341,7 @@
       });
       authToken = body.token;
       localStorage.setItem('kray_auth_token', authToken);
-      state.currentUser = { name: body.user.name, business: body.user.business, email: body.user.email, avatarUrl: body.user.avatarUrl || '' };
+      state.currentUser = { name: body.user.name, business: body.user.business, email: body.user.email, avatarUrl: body.user.avatarUrl || '', isOwner: !!body.user.isOwner };
       enterDashboard();
     } catch (err) {
       showError('forgot-error', err.message || 'Could not reset the password.');
@@ -3392,15 +3409,15 @@
       try {
         const body = await apiRequest('/api/auth/login', {
           method: 'POST',
-          body: JSON.stringify({ email, password: pass })
+          body: JSON.stringify({ email, password: pass, device_id: getDeviceId() })
         });
         if (body.requires_verification) {
-          startVerification({ email: body.email, verificationId: body.verification_id, demoCode: body.demo_code, mailError: body.mail_error });
+          startVerification({ email: body.email, verificationId: body.verification_id, demoCode: body.demo_code, mailError: body.mail_error, reason: body.reason });
           return;
         }
         authToken = body.token;
         localStorage.setItem('kray_auth_token', authToken);
-        state.currentUser = { name: body.user.name, business: body.user.business, email: body.user.email, avatarUrl: body.user.avatarUrl || '' };
+        state.currentUser = { name: body.user.name, business: body.user.business, email: body.user.email, avatarUrl: body.user.avatarUrl || '', isOwner: !!body.user.isOwner };
         enterDashboard();
       } catch (err) {
         showError('login-error', err.message || 'No matching account found. Check your details or sign up.');
@@ -3418,6 +3435,24 @@
     enterDashboard();
   }
 
+  function getDeviceId() {
+    let id = null;
+    try { id = localStorage.getItem('kray_device_id'); } catch (e) {}
+    if (!id || id.length < 16) {
+      const a = new Uint8Array(16); (window.crypto || window.msCrypto).getRandomValues(a);
+      id = Array.from(a).map(b => b.toString(16).padStart(2, '0')).join('');
+      try { localStorage.setItem('kray_device_id', id); } catch (e) {}
+    }
+    return id;
+  }
+
+  function applyRoleUI() {
+    const owner = !!(state.currentUser && state.currentUser.isOwner);
+    ['backup-card', 'owner-safety-card', 'owner-logins-card'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.style.display = owner ? '' : 'none';
+    });
+  }
+
   function startVerification(opts){
     document.getElementById('admin-verify-error').style.display = 'none';
     document.getElementById('panel-login').classList.add('hidden');
@@ -3425,8 +3460,9 @@
     document.getElementById('panel-admin-verify').classList.remove('hidden');
     document.getElementById('auth-tab-bar').style.display = 'none';
 
-    document.getElementById('admin-verify-title').textContent = 'Verify Your Email';
-    document.getElementById('admin-verify-subtitle-text').textContent = 'Enter the 6-digit code sent to';
+    const newDevice = opts.reason === 'new_device';
+    document.getElementById('admin-verify-title').textContent = newDevice ? 'Confirm This Device' : 'Verify Your Email';
+    document.getElementById('admin-verify-subtitle-text').textContent = newDevice ? 'New device. Enter the 6-digit sign-in code sent to' : 'Enter the 6-digit code sent to';
 
     if (opts.localUser) {
       // Offline/local vault mode — generate + display the code ourselves
@@ -3508,11 +3544,11 @@
       try {
         const body = await apiRequest('/api/auth/verify-code', {
           method: 'POST',
-          body: JSON.stringify({ verification_id: pendingVerificationId, code: entered })
+          body: JSON.stringify({ verification_id: pendingVerificationId, code: entered, device_id: getDeviceId() })
         });
         authToken = body.token;
         localStorage.setItem('kray_auth_token', authToken);
-        state.currentUser = { name: body.user.name, business: body.user.business, email: body.user.email, avatarUrl: body.user.avatarUrl || '' };
+        state.currentUser = { name: body.user.name, business: body.user.business, email: body.user.email, avatarUrl: body.user.avatarUrl || '', isOwner: !!body.user.isOwner };
         pendingVerificationId = null;
         pendingEmail = null;
         document.getElementById('panel-admin-verify').classList.add('hidden');
@@ -3677,6 +3713,7 @@
     document.getElementById('auth-screen').classList.add('hidden');
     document.getElementById('app-screen').classList.remove('hidden');
     updateUserProfileDisplay();
+    applyRoleUI();
 
     if (isServerMode()) {
       await loadAllDataFromServer();
@@ -3819,7 +3856,7 @@
     document.getElementById('topbar-title').textContent = sectionTitles[section][0];
     document.getElementById('topbar-sub').textContent = sectionTitles[section][1];
     if(section === 'activity') loadActivityLog();
-    if(section === 'team') loadTeam();
+    if(section === 'team') { loadTeam(); loadTeamSettings(); loadLogins(); }
     if(section === 'reconcile') renderReconcile();
     if(section === 'profile') { updateBackupLabel(); loadBackupEmailStatus(); updateInstallUI(); }
   }
@@ -6068,6 +6105,29 @@
       box.innerHTML = '<span class="muted" style="padding:12px; display:block;">' + reEsc(err.message || 'Could not load the team.') + '</span>';
     }
   }
+  async function loadLogins() {
+    const box = document.getElementById('logins-list'); if (!box || !(state.currentUser && state.currentUser.isOwner)) return;
+    try {
+      const rows = await apiRequest('/api/team/logins');
+      box.innerHTML = rows.length ? rows.map(r => {
+        const when = new Date(r.at).toLocaleString();
+        const ok = r.success;
+        return `<div style="padding:7px 0; border-bottom:1px solid var(--line); font-size:13px;">
+          <span style="color:${ok ? 'var(--green,#6FE0A8)' : 'var(--red,#dc2626)'};">${ok ? '✓ Signed in' : '✕ Not signed in'}</span>
+          · ${reEsc(r.email || 'unknown')} <span class="sub">· ${reEsc(r.method || '')}${r.reason ? ' · ' + reEsc(r.reason) : ''}</span>
+          <div class="sub">${reEsc(when)} · IP ${reEsc(r.ip || '?')} · ${reEsc(r.device || '')}</div></div>`;
+      }).join('') : 'No sign-ins recorded yet.';
+    } catch (err) { box.textContent = err.message || 'Could not load sign-ins.'; }
+  }
+  async function saveStaffDelete(on) {
+    try { await apiRequest('/api/team/settings', { method: 'PUT', body: JSON.stringify({ staff_can_delete: !!on }) }); teamMsg(on ? 'Staff can delete records.' : 'Only you can delete records now.', true); }
+    catch (err) { teamMsg(err.message || 'Could not save.', false); loadTeamSettings(); }
+  }
+  async function loadTeamSettings() {
+    const cb = document.getElementById('staff-can-delete'); if (!cb || !(state.currentUser && state.currentUser.isOwner)) return;
+    try { const st = await apiRequest('/api/team/settings'); cb.checked = !!st.staff_can_delete; } catch (e) {}
+  }
+
   async function inviteTeamMember(e) {
     e.preventDefault(); teamMsg('', true);
     const btn = document.getElementById('team-invite-btn'); btn.disabled = true;
