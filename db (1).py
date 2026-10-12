@@ -1,0 +1,307 @@
+"""
+db.py — PostgreSQL connection helper and schema for the K-Ray Enterprise
+backend.
+
+Uses psycopg2 with Render's auto-provided DATABASE_URL environment
+variable when you attach a Render Postgres database to this service.
+Falls back to KRAY_DATABASE_URL if you're running this elsewhere.
+
+Rows are returned as plain dicts (via RealDictCursor) so the rest of
+the codebase can keep using row['column_name'] access exactly like it
+did with sqlite3.Row.
+"""
+import os
+from contextlib import contextmanager
+
+import psycopg2
+import psycopg2.extras
+
+DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("KRAY_DATABASE_URL")
+
+if not DATABASE_URL:
+    raise RuntimeError(
+        "No database configured. Set DATABASE_URL (Render provides this "
+        "automatically when you attach a Postgres database to this "
+        "service) or KRAY_DATABASE_URL."
+    )
+
+# Render's DATABASE_URL sometimes starts with 'postgres://' — psycopg2
+# accepts both, but normalize just in case other tools are stricter.
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS users (
+    id              SERIAL PRIMARY KEY,
+    name            TEXT NOT NULL,
+    business        TEXT,
+    email           TEXT NOT NULL UNIQUE,
+    password_hash   TEXT NOT NULL,
+    avatar_url      TEXT,
+    email_verified  BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at      TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS verifications (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    code            TEXT NOT NULL,
+    purpose         TEXT NOT NULL,
+    expires_at      TIMESTAMP NOT NULL,
+    used            BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at      TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS products (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name            TEXT NOT NULL,
+    category        TEXT,
+    cost            DOUBLE PRECISION NOT NULL DEFAULT 0,
+    price           DOUBLE PRECISION NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS purchases (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    receipt_id      INTEGER,
+    date            TEXT NOT NULL,
+    item            TEXT NOT NULL,
+    category        TEXT,
+    supplier        TEXT,
+    account         TEXT NOT NULL,
+    qty             DOUBLE PRECISION NOT NULL,
+    cost            DOUBLE PRECISION NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS sales (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    receipt_id      INTEGER,
+    date            TEXT NOT NULL,
+    item            TEXT NOT NULL,
+    customer        TEXT,
+    account         TEXT NOT NULL,
+    qty             DOUBLE PRECISION NOT NULL,
+    price           DOUBLE PRECISION NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS credit_sales (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    receipt_id      INTEGER,
+    date            TEXT NOT NULL,
+    customer        TEXT NOT NULL,
+    item            TEXT NOT NULL,
+    qty             DOUBLE PRECISION NOT NULL,
+    price           DOUBLE PRECISION NOT NULL,
+    total           DOUBLE PRECISION NOT NULL,
+    paid            DOUBLE PRECISION NOT NULL DEFAULT 0,
+    remaining       DOUBLE PRECISION NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS credit_payments (
+    id              SERIAL PRIMARY KEY,
+    credit_sale_id  INTEGER NOT NULL REFERENCES credit_sales(id) ON DELETE CASCADE,
+    date            TEXT NOT NULL,
+    amount          DOUBLE PRECISION NOT NULL,
+    account         TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS expenses (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    date            TEXT NOT NULL,
+    name            TEXT NOT NULL,
+    category        TEXT,
+    amount          DOUBLE PRECISION NOT NULL,
+    account         TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS cash (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    date            TEXT NOT NULL,
+    source          TEXT,
+    account         TEXT NOT NULL,
+    amount          DOUBLE PRECISION NOT NULL,
+    note            TEXT
+);
+
+CREATE TABLE IF NOT EXISTS transfers (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    date            TEXT NOT NULL,
+    from_account    TEXT NOT NULL,
+    to_account      TEXT NOT NULL,
+    amount          DOUBLE PRECISION NOT NULL,
+    note            TEXT
+);
+
+CREATE TABLE IF NOT EXISTS pumice (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    date            TEXT NOT NULL,
+    type            TEXT NOT NULL CHECK(type IN ('sale','purchase','expense','withdrawal')),
+    item_desc       TEXT,
+    qty             DOUBLE PRECISION,
+    amount          DOUBLE PRECISION NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS stock_logs (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    date            TEXT NOT NULL,
+    type            TEXT NOT NULL,
+    item            TEXT NOT NULL,
+    qty             DOUBLE PRECISION NOT NULL,
+    cost            DOUBLE PRECISION,
+    comment         TEXT
+);
+
+CREATE TABLE IF NOT EXISTS reconciliations (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    date            TEXT NOT NULL,
+    account         TEXT NOT NULL,
+    expected        DOUBLE PRECISION NOT NULL,
+    counted         DOUBLE PRECISION NOT NULL,
+    difference      DOUBLE PRECISION NOT NULL,
+    note            TEXT,
+    checked_by      TEXT,
+    adjusted        BOOLEAN NOT NULL DEFAULT FALSE
+);
+
+CREATE TABLE IF NOT EXISTS comments (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    author          TEXT NOT NULL,
+    text            TEXT NOT NULL,
+    date            TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS activity_log (
+    id              SERIAL PRIMARY KEY,
+    user_id         INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    user_name       TEXT,
+    action          TEXT NOT NULL,
+    resource_type   TEXT NOT NULL,
+    resource_id     INTEGER,
+    summary         TEXT,
+    created_at      TIMESTAMP NOT NULL DEFAULT NOW()
+);
+"""
+
+
+# Lightweight migrations for columns/tables added after a database was
+# already created by an earlier version of this schema. Each statement
+# is safe to run repeatedly (IF NOT EXISTS everywhere).
+MIGRATIONS = """
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled BOOLEAN NOT NULL DEFAULT FALSE;
+CREATE TABLE IF NOT EXISTS product_price_history (
+    id          SERIAL PRIMARY KEY,
+    product_id  INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    field       TEXT NOT NULL,
+    old_value   DOUBLE PRECISION,
+    new_value   DOUBLE PRECISION NOT NULL,
+    changed_by  TEXT,
+    changed_at  TIMESTAMP NOT NULL DEFAULT NOW()
+);
+ALTER TABLE verifications ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS settings (
+    key    TEXT PRIMARY KEY,
+    value  TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS trusted_devices (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    device_hash TEXT NOT NULL,
+    label       TEXT,
+    first_seen  TIMESTAMP NOT NULL DEFAULT NOW(),
+    last_seen   TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, device_hash)
+);
+CREATE TABLE IF NOT EXISTS login_log (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    email       TEXT,
+    method      TEXT,
+    success     BOOLEAN NOT NULL,
+    reason      TEXT,
+    ip          TEXT,
+    user_agent  TEXT,
+    at          TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS allowed_emails (
+    email     TEXT PRIMARY KEY,
+    added_by  TEXT,
+    added_at  TIMESTAMP NOT NULL DEFAULT NOW()
+);
+CREATE TABLE IF NOT EXISTS daily_summary_log (
+    day       TEXT PRIMARY KEY,
+    sent_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+    recipients INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS backup_email_log (
+    day       TEXT PRIMARY KEY,
+    sent_at   TIMESTAMP NOT NULL DEFAULT NOW(),
+    recipients INTEGER NOT NULL DEFAULT 0
+);
+ALTER TABLE verifications DROP CONSTRAINT IF EXISTS verifications_purpose_check;
+ALTER TABLE pumice DROP CONSTRAINT IF EXISTS pumice_type_check;
+ALTER TABLE pumice ADD CONSTRAINT pumice_type_check CHECK (type IN ('sale','purchase','expense','withdrawal'));
+"""
+
+
+def get_connection():
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
+    return conn
+
+
+def init_db():
+    conn = get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(SCHEMA)
+            cur.execute(MIGRATIONS)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+@contextmanager
+def db_cursor(commit=False):
+    """Context manager yielding a dict-cursor; commits on success if commit=True."""
+    conn = get_connection()
+    try:
+        cur = conn.cursor()
+        yield cur
+        if commit:
+            conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def row_to_dict(row):
+    return dict(row) if row is not None else None
+
+
+def rows_to_list(rows):
+    return [dict(r) for r in rows]
+
+
+def log_activity(cur, user_id, user_name, action, resource_type, resource_id, summary):
+    """
+    Records an entry in the shared activity log. Call this inside the
+    same db_cursor(commit=True) block as the change it's describing, so
+    it commits atomically with the change.
+    """
+    cur.execute(
+        """INSERT INTO activity_log (user_id, user_name, action, resource_type, resource_id, summary)
+           VALUES (%s, %s, %s, %s, %s, %s)""",
+        (user_id, user_name, action, resource_type, resource_id, summary),
+    )
