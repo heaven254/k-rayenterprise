@@ -53,13 +53,14 @@ def build_summary(day):
         sales = cur.fetchall()
         cur.execute("SELECT item, customer, qty, price, total, receipt_id FROM credit_sales WHERE date LIKE %s", (like,))
         credit = cur.fetchall()
-        cur.execute("SELECT amount, account FROM credit_payments WHERE date LIKE %s", (like,))
+        cur.execute("SELECT cp.amount, cp.account, cs.customer FROM credit_payments cp "
+                    "LEFT JOIN credit_sales cs ON cs.id = cp.credit_sale_id WHERE cp.date LIKE %s", (like,))
         repay = cur.fetchall()
         cur.execute("SELECT account, qty, cost FROM purchases WHERE date LIKE %s", (like,))
         purchases = cur.fetchall()
         cur.execute("SELECT name, category, amount, account FROM expenses WHERE date LIKE %s", (like,))
         expenses = cur.fetchall()
-        cur.execute("SELECT type, amount FROM pumice WHERE date LIKE %s", (like,))
+        cur.execute("SELECT type, amount, item_desc, item FROM pumice WHERE date LIKE %s", (like,))
         pumice = cur.fetchall()
         cur.execute("SELECT COALESCE(SUM(remaining),0) AS owed, COUNT(DISTINCT customer) AS people FROM credit_sales WHERE remaining > 0.005")
         loans = cur.fetchone()
@@ -89,6 +90,28 @@ def build_summary(day):
         it["qty"] += r["qty"]; it["amount"] += amt
     top = sorted(items.items(), key=lambda kv: kv[1]["amount"], reverse=True)[:3]
 
+    # --- who came in today (every distinct customer across sales, loans, repayments and Pumice) ---
+    people = {}
+
+    def person(name, tag=None):
+        name = (name or "").strip() or "Walk-in customer"
+        key = name.lower()
+        p = people.setdefault(key, {"name": name, "paid": 0.0, "credit": 0.0, "repaid": 0.0, "pumice": 0.0, "visits": set()})
+        return p
+
+    for r in sales:
+        p = person(r["customer"]); p["paid"] += r["qty"] * r["price"]; p["visits"].add(("s", r["receipt_id"] or id(r)))
+    for r in credit:
+        p = person(r["customer"]); p["credit"] += r["total"]; p["visits"].add(("c", r["receipt_id"] or id(r)))
+    for r in repay:
+        p = person(r["customer"]); p["repaid"] += r["amount"]; p["visits"].add(("r", id(r)))
+    for r in pumice:
+        if r["type"] == "sale":
+            p = person(r["item_desc"]); p["pumice"] += r["amount"]; p["visits"].add(("p", id(r)))
+    customers = sorted(people.values(), key=lambda p: p["paid"] + p["credit"] + p["pumice"] + p["repaid"], reverse=True)
+    for p in customers:
+        p["total"] = p["paid"] + p["credit"] + p["pumice"]
+
     pm = {"sale": 0, "purchase": 0, "expense": 0, "withdrawal": 0}
     for r in pumice:
         pm[r["type"]] = pm.get(r["type"], 0) + r["amount"]
@@ -99,10 +122,26 @@ def build_summary(day):
         "purchases": total_purchases, "expenses": total_expenses, "repaid": repaid,
         "net": total_sales - total_purchases - total_expenses,
         "money_in": money_in, "money_out": money_out, "top": top,
-        "pumice": pm, "pumice_any": any(pm.values()),
+        "pumice": pm, "pumice_any": any(pm.values()), "customers": customers,
         "loans_owed": float(loans["owed"] or 0), "loans_people": int(loans["people"] or 0),
         "empty": not (sales or credit or repay or purchases or expenses or pumice),
     }
+
+
+MAX_CUSTOMERS = 30
+
+
+def _customer_line(c):
+    bits = []
+    if c["total"]:
+        bits.append(kes(c["total"]) + " bought")
+    if c["credit"]:
+        bits.append(f"{kes(c['credit'])} on credit")
+    if c["repaid"]:
+        bits.append(f"paid back {kes(c['repaid'])}")
+    if c["pumice"]:
+        bits.append(f"incl. Pumice {kes(c['pumice'])}")
+    return f"{c['name']} — " + ", ".join(bits) + f" ({len(c['visits'])} visit(s))"
 
 
 def render(s):
@@ -137,6 +176,13 @@ def render(s):
             q = int(v["qty"]) if abs(v["qty"] - round(v["qty"])) < 1e-9 else round(v["qty"], 2)
             lines.append(f"  {name} — {q} sold, {kes(v['amount'])}")
         lines.append("")
+    cust = s["customers"]
+    lines.append(f"Customers who came in today: {len(cust)}")
+    for c in cust[:MAX_CUSTOMERS]:
+        lines.append("  " + _customer_line(c))
+    if len(cust) > MAX_CUSTOMERS:
+        lines.append(f"  …and {len(cust) - MAX_CUSTOMERS} more")
+    lines.append("")
     if s["pumice_any"]:
         p = s["pumice"]
         lines.append(f"Pumice today: sales {kes(p['sale'])}, purchases {kes(p['purchase'])}, expenses {kes(p['expense'])}, withdrawn {kes(p['withdrawal'])}")
@@ -179,6 +225,24 @@ def render(s):
             q = int(v["qty"]) if abs(v["qty"] - round(v["qty"])) < 1e-9 else round(v["qty"], 2)
             h.append(f'<tr><td style="padding:4px 0;">{escape(name)} <span style="color:#666;">×{q}</span></td><td style="text-align:right;">{escape(kes(v["amount"]))}</td></tr>')
         h.append('</table>')
+    h.append(f'<h3 style="margin:20px 0 6px;">Customers today ({len(cust)})</h3>')
+    if cust:
+        h.append('<table style="width:100%;border-collapse:collapse;font-size:14px;">')
+        for c in cust[:MAX_CUSTOMERS]:
+            notes = []
+            if c["credit"]: notes.append(f'on credit {kes(c["credit"])}')
+            if c["repaid"]: notes.append(f'paid back {kes(c["repaid"])}')
+            if c["pumice"]: notes.append(f'incl. Pumice {kes(c["pumice"])}')
+            sub = f'<div style="color:#666;font-size:12px;">{escape(", ".join(notes))}</div>' if notes else ""
+            amt = c["total"] if c["total"] else c["repaid"]
+            h.append(f'<tr><td style="padding:5px 0;border-bottom:1px solid #eee;">{escape(c["name"])}'
+                     f'<span style="color:#666;"> · {len(c["visits"])} visit(s)</span>{sub}</td>'
+                     f'<td style="text-align:right;vertical-align:top;padding:5px 0;border-bottom:1px solid #eee;">{escape(kes(amt))}</td></tr>')
+        h.append('</table>')
+        if len(cust) > MAX_CUSTOMERS:
+            h.append(f'<div style="color:#666;font-size:13px;">…and {len(cust) - MAX_CUSTOMERS} more</div>')
+    else:
+        h.append('<div style="color:#666;font-size:14px;">No customers recorded today.</div>')
     if s["pumice_any"]:
         p = s["pumice"]
         h.append(f'<h3 style="margin:20px 0 6px;">Pumice</h3><div style="font-size:14px;">Sales {escape(kes(p["sale"]))} · Purchases {escape(kes(p["purchase"]))} · Expenses {escape(kes(p["expense"]))} · Withdrawn {escape(kes(p["withdrawal"]))}</div>')
@@ -190,7 +254,7 @@ def _recipients():
     if OVERRIDE_TO:
         return OVERRIDE_TO
     with db_cursor() as cur:
-        cur.execute("SELECT email FROM users WHERE email_verified = TRUE ORDER BY id")
+        cur.execute("SELECT email FROM users WHERE email_verified = TRUE AND disabled = FALSE AND summary_email = TRUE ORDER BY id")
         return [r["email"] for r in cur.fetchall()]
 
 

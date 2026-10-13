@@ -199,6 +199,7 @@ CREATE TABLE IF NOT EXISTS activity_log (
 MIGRATIONS = """
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS disabled BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS summary_email BOOLEAN NOT NULL DEFAULT TRUE;
 CREATE TABLE IF NOT EXISTS product_price_history (
     id          SERIAL PRIMARY KEY,
     product_id  INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -207,6 +208,39 @@ CREATE TABLE IF NOT EXISTS product_price_history (
     new_value   DOUBLE PRECISION NOT NULL,
     changed_by  TEXT,
     changed_at  TIMESTAMP NOT NULL DEFAULT NOW()
+);
+ALTER TABLE verifications ADD COLUMN IF NOT EXISTS attempts INTEGER NOT NULL DEFAULT 0;
+CREATE TABLE IF NOT EXISTS settings (
+    key    TEXT PRIMARY KEY,
+    value  TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS trusted_devices (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    device_hash TEXT NOT NULL,
+    label       TEXT,
+    first_seen  TIMESTAMP NOT NULL DEFAULT NOW(),
+    last_seen   TIMESTAMP NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, device_hash)
+);
+CREATE TABLE IF NOT EXISTS login_log (
+    id          SERIAL PRIMARY KEY,
+    user_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    email       TEXT,
+    method      TEXT,
+    success     BOOLEAN NOT NULL,
+    reason      TEXT,
+    ip          TEXT,
+    user_agent  TEXT,
+    at          TIMESTAMP NOT NULL DEFAULT NOW()
+);
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS item TEXT;
+ALTER TABLE expenses ADD COLUMN IF NOT EXISTS qty DOUBLE PRECISION;
+ALTER TABLE pumice ADD COLUMN IF NOT EXISTS item TEXT;
+CREATE TABLE IF NOT EXISTS pumice_types (
+    id        SERIAL PRIMARY KEY,
+    user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name      TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS allowed_emails (
     email     TEXT PRIMARY KEY,

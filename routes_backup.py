@@ -11,7 +11,7 @@ from flask import Blueprint, request, jsonify, g
 import psycopg2.extras
 
 from db import db_cursor, rows_to_list, log_activity
-from auth import login_required
+from auth import login_required, owner_required
 
 bp = Blueprint("backup", __name__, url_prefix="/api")
 
@@ -22,10 +22,11 @@ TABLES = {
     "sales":       ["id", "receipt_id", "date", "item", "customer", "account", "qty", "price"],
     "credit_sales": ["id", "receipt_id", "date", "customer", "item", "qty", "price", "total", "paid", "remaining"],
     "credit_payments": ["id", "credit_sale_id", "date", "amount", "account"],
-    "expenses":    ["id", "date", "name", "category", "amount", "account"],
+    "expenses":    ["id", "date", "name", "category", "amount", "account", "item", "qty"],
     "cash":        ["id", "date", "source", "account", "amount", "note"],
     "transfers":   ["id", "date", "from_account", "to_account", "amount", "note"],
-    "pumice":      ["id", "date", "type", "item_desc", "qty", "amount"],
+    "pumice":      ["id", "date", "type", "item_desc", "qty", "amount", "item"],
+    "pumice_types": ["id", "name"],
     "stock_logs":  ["id", "date", "type", "item", "qty", "cost", "comment"],
     "comments":    ["id", "author", "text", "date"],
     "reconciliations": ["id", "date", "account", "expected", "counted", "difference", "note", "checked_by", "adjusted"],
@@ -34,9 +35,9 @@ TABLES = {
 NO_USER = {"credit_payments"}
 # delete children first, insert parents first
 DELETE_ORDER = ["credit_payments", "credit_sales", "sales", "purchases", "products",
-                "expenses", "cash", "transfers", "pumice", "stock_logs", "comments", "reconciliations"]
+                "expenses", "cash", "transfers", "pumice", "pumice_types", "stock_logs", "comments", "reconciliations"]
 INSERT_ORDER = ["products", "purchases", "sales", "credit_sales", "credit_payments",
-                "expenses", "cash", "transfers", "pumice", "stock_logs", "comments", "reconciliations"]
+                "expenses", "cash", "transfers", "pumice", "pumice_types", "stock_logs", "comments", "reconciliations"]
 
 
 def build_backup(created_by):
@@ -56,13 +57,13 @@ def build_backup(created_by):
 
 
 @bp.get("/backup")
-@login_required
+@owner_required
 def backup():
     return jsonify(build_backup(g.name))
 
 
 @bp.post("/restore")
-@login_required
+@owner_required
 def restore():
     data = request.get_json(silent=True) or {}
     if data.get("confirm") != "REPLACE":
@@ -135,8 +136,12 @@ def _nairobi_now():
 def _recipients():
     if B_TO:
         return B_TO
+    from auth import owner_ids
     with db_cursor() as cur:
-        cur.execute("SELECT email FROM users WHERE email_verified = TRUE ORDER BY id")
+        ids = owner_ids(cur)
+        if not ids:
+            return []
+        cur.execute("SELECT email FROM users WHERE email_verified = TRUE AND disabled = FALSE AND id = ANY(%s) ORDER BY id", (list(ids),))
         return [r["email"] for r in cur.fetchall()]
 
 
@@ -218,7 +223,7 @@ def backup_status():
 
 
 @bp.post("/backup/email-now")
-@login_required
+@owner_required
 def backup_email_now():
     """Email a full backup to the logged-in user only."""
     if mailer.DEMO_MODE:

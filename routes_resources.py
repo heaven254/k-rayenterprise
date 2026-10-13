@@ -156,8 +156,8 @@ register_simple_resource(
 
 register_simple_resource(
     "expenses", "expenses",
-    fields=["date", "name", "category", "amount", "account"],
-    numeric_fields=("amount",),
+    fields=["date", "name", "category", "amount", "account", "item", "qty"],
+    numeric_fields=("amount", "qty"),
 )
 
 register_simple_resource(
@@ -174,9 +174,14 @@ register_simple_resource(
 
 register_simple_resource(
     "pumice", "pumice",
-    fields=["date", "type", "desc", "qty", "amount"],
+    fields=["date", "type", "desc", "qty", "amount", "item"],
     numeric_fields=("qty", "amount"),
     column_map={"desc": "item_desc"},
+)
+
+register_simple_resource(
+    "pumice-types", "pumice_types",
+    fields=["name"],
 )
 
 register_simple_resource(
