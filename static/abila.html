@@ -1492,9 +1492,10 @@
           </div>
           <form class="inline-form" onsubmit="addPumiceSale(event)">
             <div class="field"><label>Customer</label><input type="text" id="pm-s-customer" placeholder="Buyer name" required></div>
+            <div class="field"><label>Pumice Type</label><select id="pm-s-type" onchange="onPumiceTypeChange(this)" required style="background:var(--panel-alt);border:1px solid var(--line);color:var(--text);padding:11px 13px;border-radius:8px;"></select></div>
             <div class="field small"><label>Date</label><input type="date" id="pm-s-date" required></div>
             <div class="field small"><label>Qty (units/bags)</label><input type="number" id="pm-s-qty" min="0.01" step="0.01" value="1" required></div>
-            <div class="field small"><label>Unit Price</label><input type="number" id="pm-s-price" min="0" step="0.01" required></div>
+            <div class="field small"><label>Price each</label><input type="number" id="pm-s-price" min="0" step="0.01" required></div>
             <button type="submit" class="btn btn-primary" style="height:41px; margin-top: auto;">+ Add Pumice Sale</button>
           </form>
         </div>
@@ -1504,10 +1505,11 @@
             <div><h3>Log Pumice Purchase</h3><div class="sub">Stock purchases deducted directly from M-Pesa</div></div>
           </div>
           <form class="inline-form" onsubmit="addPumicePurchase(event)">
-            <div class="field"><label>Vendor / Description</label><input type="text" id="pm-p-desc" placeholder="e.g. Quarry batch / Freight" required></div>
+            <div class="field"><label>Vendor / Note</label><input type="text" id="pm-p-desc" placeholder="e.g. Quarry batch / Freight" required></div>
+            <div class="field"><label>Pumice Type</label><select id="pm-p-type" onchange="onPumiceTypeChange(this)" required style="background:var(--panel-alt);border:1px solid var(--line);color:var(--text);padding:11px 13px;border-radius:8px;"></select></div>
             <div class="field small"><label>Date</label><input type="date" id="pm-p-date" required></div>
-            <div class="field small"><label>Qty</label><input type="number" id="pm-p-qty" min="0.01" step="0.01" value="1"></div>
-            <div class="field small"><label>Amount (KSh)</label><input type="number" id="pm-p-amount" min="0" step="0.01" required></div>
+            <div class="field small"><label>Qty</label><input type="number" id="pm-p-qty" min="0.01" step="0.01" value="1" required></div>
+            <div class="field small"><label>Price each (KSh)</label><input type="number" id="pm-p-price" min="0" step="0.01" required></div>
             <button type="submit" class="btn btn-secondary" style="height:41px; margin-top: auto;">+ Log Pumice Purchase</button>
           </form>
         </div>
@@ -1519,10 +1521,18 @@
             <div><h3>Log Pumice Expense</h3><div class="sub">Operating costs deducted directly from M-Pesa</div></div>
           </div>
           <form class="inline-form" onsubmit="addPumiceExpense(event)">
-            <div class="field"><label>Description</label><input type="text" id="pm-e-desc" placeholder="e.g. Transport / Labor" required></div>
+            <div class="field"><label>Kind of expense</label>
+              <select id="pm-e-kind" onchange="togglePumiceExpenseKind()" style="background:var(--panel-alt);border:1px solid var(--line);color:var(--text);padding:11px 13px;border-radius:8px;">
+                <option value="plain">Plain expense (salary, transport… no quantity)</option>
+                <option value="qty">Damaged / lost pumice (has quantity)</option>
+              </select>
+            </div>
+            <div class="field"><label id="pm-e-desc-label">Description</label><input type="text" id="pm-e-desc" placeholder="e.g. Transport / Labor" required></div>
             <div class="field small"><label>Date</label><input type="date" id="pm-e-date" required></div>
-            <div class="field small"><label>Qty</label><input type="number" id="pm-e-qty" min="0.01" step="0.01" value="1"></div>
-            <div class="field small"><label>Amount (KSh)</label><input type="number" id="pm-e-amount" min="0" step="0.01" required></div>
+            <div class="field small" id="pm-e-plain-box"><label>Amount (KSh)</label><input type="number" id="pm-e-amount" min="0" step="0.01"></div>
+            <div class="field hidden" id="pm-e-type-box"><label>Pumice Type</label><select id="pm-e-type" onchange="onPumiceTypeChange(this)" style="background:var(--panel-alt);border:1px solid var(--line);color:var(--text);padding:11px 13px;border-radius:8px;"></select></div>
+            <div class="field small hidden" id="pm-e-qty-box"><label>Qty lost</label><input type="number" id="pm-e-qty" min="0.01" step="0.01" value="1"></div>
+            <div class="field small hidden" id="pm-e-unit-box"><label>Cost each (KSh)</label><input type="number" id="pm-e-unit" min="0" step="0.01"></div>
             <button type="submit" class="btn btn-secondary" style="height:41px; margin-top: auto;">+ Log Pumice Expense</button>
           </form>
         </div>
@@ -1537,6 +1547,18 @@
             <div class="field small"><label>Amount (KSh)</label><input type="number" id="pm-w-amount" min="0" step="0.01" required></div>
             <button type="submit" class="btn btn-secondary" style="height:41px; margin-top: auto;">+ Log Withdrawal</button>
           </form>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <div><h3>Pumice Stock by Type</h3><div class="sub">What you bought, sold and lost of each type, with average prices (all time)</div></div>
+        </div>
+        <div class="table-container">
+          <table>
+            <thead><tr><th>Type</th><th class="num">Bought</th><th class="num">Avg buy price</th><th class="num">Sold</th><th class="num">Avg sell price</th><th class="num">Damaged / lost</th><th class="num">In stock</th></tr></thead>
+            <tbody id="pm-stock-body"><tr class="empty-row"><td colspan="7">Log a Pumice purchase to see stock here.</td></tr></tbody>
+          </table>
         </div>
       </div>
 
@@ -1563,8 +1585,8 @@
         </div>
         <div class="table-container">
           <table>
-            <thead><tr><th>Date</th><th>Customer</th><th class="num">Qty</th><th class="num">Amount (KSh)</th><th style="text-align:center;">Action</th></tr></thead>
-            <tbody id="pm-sales-ledger-body"><tr class="empty-row"><td colspan="5">No Pumice sales logged yet.</td></tr></tbody>
+            <thead><tr><th>Date</th><th>Customer</th><th>Type</th><th class="num">Qty</th><th class="num">Price each</th><th class="num">Amount (KSh)</th><th style="text-align:center;">Action</th></tr></thead>
+            <tbody id="pm-sales-ledger-body"><tr class="empty-row"><td colspan="7">No Pumice sales logged yet.</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1591,8 +1613,8 @@
         </div>
         <div class="table-container">
           <table>
-            <thead><tr><th>Date</th><th>Vendor / Description</th><th class="num">Qty</th><th class="num">Amount (KSh)</th><th style="text-align:center;">Action</th></tr></thead>
-            <tbody id="pm-purchases-ledger-body"><tr class="empty-row"><td colspan="5">No Pumice purchases logged yet.</td></tr></tbody>
+            <thead><tr><th>Date</th><th>Vendor / Note</th><th>Type</th><th class="num">Qty</th><th class="num">Price each</th><th class="num">Amount (KSh)</th><th style="text-align:center;">Action</th></tr></thead>
+            <tbody id="pm-purchases-ledger-body"><tr class="empty-row"><td colspan="7">No Pumice purchases logged yet.</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -1619,8 +1641,8 @@
         </div>
         <div class="table-container">
           <table>
-            <thead><tr><th>Date</th><th>Description</th><th class="num">Qty</th><th class="num">Amount (KSh)</th><th style="text-align:center;">Action</th></tr></thead>
-            <tbody id="pm-expenses-ledger-body"><tr class="empty-row"><td colspan="5">No Pumice expenses logged yet.</td></tr></tbody>
+            <thead><tr><th>Date</th><th>Description</th><th>Kind</th><th class="num">Qty</th><th class="num">Cost each</th><th class="num">Amount (KSh)</th><th style="text-align:center;">Action</th></tr></thead>
+            <tbody id="pm-expenses-ledger-body"><tr class="empty-row"><td colspan="7">No Pumice expenses logged yet.</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -2228,10 +2250,19 @@
           <div><h3>Log Operating Expense</h3><div class="sub">Track general costs (Rent, Salaries, Utilities, Transport, etc. - Pumice excluded)</div></div>
         </div>
         <form class="inline-form" onsubmit="addExpense(event)">
-          <div class="field"><label>Expense Name</label><input type="text" id="e-name" placeholder="e.g. Electricity bill" required></div>
-          <div class="field small"><label>Amount (KSh)</label><input type="number" id="e-amount" min="0" step="0.01" required></div>
+          <div class="field"><label>Kind of expense</label>
+            <select id="e-kind" onchange="toggleExpenseKind()" style="background:var(--panel-alt);border:1px solid var(--line);color:var(--text);padding:11px 13px;border-radius:8px;">
+              <option value="plain">Plain expense (rent, salary, power… no quantity)</option>
+              <option value="qty">Damaged / lost goods (has quantity)</option>
+            </select>
+          </div>
+          <div class="field"><label id="e-name-label">Expense Name</label><input type="text" id="e-name" placeholder="e.g. Electricity bill" required></div>
+          <div class="field small" id="e-amount-box"><label>Amount (KSh)</label><input type="number" id="e-amount" min="0" step="0.01"></div>
+          <div class="field hidden" id="e-item-box"><label>Product</label><input type="text" id="e-item" list="s-item-datalist" placeholder="Pick or type the product" oninput="onExpenseItemChange()"></div>
+          <div class="field small hidden" id="e-qty-box"><label>Qty lost</label><input type="number" id="e-qty" min="0.01" step="0.01" value="1"></div>
+          <div class="field small hidden" id="e-unit-box"><label>Cost each (KSh)</label><input type="number" id="e-unit" min="0" step="0.01"></div>
           <div class="field small"><label>Date</label><input type="date" id="e-date" required></div>
-          <div class="field"><label>Category</label>
+          <div class="field" id="e-category-box"><label>Category</label>
             <select id="e-category" style="background:var(--panel-alt);border:1px solid var(--line);color:var(--text);padding:11px 13px;border-radius:8px;">
               <option value="Rent">Rent</option>
               <option value="Salaries">Salaries / Labor</option>
@@ -2241,7 +2272,7 @@
               <option value="General" selected>General Expense</option>
             </select>
           </div>
-          <div class="field"><label>Paid From</label>
+          <div class="field" id="e-account-box"><label>Paid From</label>
             <select id="e-account" style="background:var(--panel-alt);border:1px solid var(--line);color:var(--text);padding:11px 13px;border-radius:8px;">
               <option value="cash" selected>Cash</option>
               <option value="mpesa">M-Pesa</option>
@@ -2251,6 +2282,7 @@
           </div>
           <button type="submit" class="btn btn-primary">+ Log Expense</button>
         </form>
+        <div class="sub hidden" id="e-writeoff-note" style="margin-top:10px;">Damaged or lost goods are recorded as a loss and taken out of stock. No account balance changes, because the money was already spent when you bought them.</div>
 
         <div class="card-head" style="margin-top: 30px;">
           <div><h3>General Expenses Ledger</h3><div class="sub">Complete record of business operating expenses</div></div>
@@ -2275,9 +2307,9 @@
 
         <div class="table-container">
           <table>
-            <thead><tr><th>Date</th><th>Expense Name</th><th>Category</th><th>Account</th><th class="num">Amount</th><th style="text-align:center;">Action</th></tr></thead>
-            <tbody id="expenses-body"><tr class="empty-row"><td colspan="6">No expenses logged yet.</td></tr></tbody>
-            <tfoot><tr><td colspan="4">Total Expenses (Filtered)</td><td class="num" id="expenses-filtered-total">KSh 0</td><td></td></tr></tfoot>
+            <thead><tr><th>Date</th><th>Expense Name</th><th>Category</th><th>Account</th><th class="num">Qty</th><th class="num">Amount</th><th style="text-align:center;">Action</th></tr></thead>
+            <tbody id="expenses-body"><tr class="empty-row"><td colspan="7">No expenses logged yet.</td></tr></tbody>
+            <tfoot><tr><td colspan="5">Total Expenses (Filtered)</td><td class="num" id="expenses-filtered-total">KSh 0</td><td></td></tr></tfoot>
           </table>
         </div>
       </div>
@@ -2478,7 +2510,7 @@
       <div class="two-col">
         <div class="card">
           <div class="card-head">
-            <div><h3>People with access</h3><div class="sub">Everyone here sees and edits all the business data</div></div>
+            <div><h3>People with access</h3><div class="sub">Everyone here sees and edits all the business data. The owner can switch each person's 8 pm summary email on or off</div></div>
             <button class="btn btn-secondary btn-small" onclick="loadTeam()">↻ Refresh</button>
           </div>
           <div id="team-members"><span class="muted" style="font-size:13px; font-style:italic; padding:12px; display:block;">Loading…</span></div>
@@ -2669,6 +2701,7 @@
     salesPageSize: 30,
     statsPeriod: 'weekly',
     pumicePeriod: 'weekly',
+    pumiceTypes: [],
     topBuyersSort: 'amount',
     _id: 1
   };
@@ -3131,6 +3164,7 @@
 
   const accountLabels = {
     pochi: 'Pochi La Biashara',
+    writeoff: 'Write-off (no cash)',
     mpesa: 'M-Pesa',
     cash: 'Cash',
     moneybox: 'Moneybox',
@@ -3673,7 +3707,7 @@
 
   async function loadAllDataFromServer() {
     try {
-      const [products, purchases, sales, creditSales, expenses, cash, transfers, pumice, stockLogs, comments, priceHistory, recons] = await Promise.all([
+      const [products, purchases, sales, creditSales, expenses, cash, transfers, pumice, stockLogs, comments, priceHistory, recons, pumiceTypes] = await Promise.all([
         apiRequest('/api/products'),
         apiRequest('/api/purchases'),
         apiRequest('/api/sales'),
@@ -3686,9 +3720,11 @@
         apiRequest('/api/comments'),
         apiRequest('/api/products/price-history').catch(() => []),
         apiRequest('/api/reconciliations').catch(() => []),
+        apiRequest('/api/pumice-types').catch(() => []),
       ]);
       state.priceHistory = priceHistory || [];
       state.reconciliations = recons || [];
+      state.pumiceTypes = (pumiceTypes || []).map(t => ({ id: t.id, name: t.name })).sort((a, b) => a.name.localeCompare(b.name));
 
       state.products = products.map(p => ({ id: p.id, name: p.name, category: p.category, cost: p.cost, price: p.price }));
       state.purchases = purchases.map(p => ({ id: p.id, receiptId: p.receipt_id, date: p.date, item: p.item, category: p.category, supplier: p.supplier, account: p.account, qty: p.qty, cost: p.cost }));
@@ -3698,10 +3734,10 @@
         qty: c.qty, price: c.price, total: c.total, paid: c.paid, remaining: c.remaining,
         payments: (c.payments || []).map(p => ({ id: p.id, date: p.date, amount: p.amount, account: p.account }))
       }));
-      state.expenses = expenses.map(e => ({ id: e.id, name: e.name, amount: e.amount, date: e.date, category: e.category, account: e.account }));
+      state.expenses = expenses.map(e => ({ id: e.id, name: e.name, amount: e.amount, date: e.date, category: e.category, account: e.account, item: e.item || '', qty: e.qty || 0 }));
       state.cash = cash.map(c => ({ id: c.id, source: c.source, account: c.account, amount: c.amount, date: c.date, note: c.note }));
       state.transfers = transfers.map(t => ({ id: t.id, date: t.date, from: t.from_account, to: t.to_account, note: t.note, amount: t.amount }));
-      state.pumice = pumice.map(p => ({ id: p.id, date: p.date, type: p.type, desc: p.desc, qty: p.qty, amount: p.amount }));
+      state.pumice = pumice.map(p => ({ id: p.id, date: p.date, type: p.type, desc: p.desc, qty: p.qty, amount: p.amount, item: p.item || '' }));
       state.manualStockLogs = stockLogs.map(l => ({ id: l.id, date: l.date, type: l.type, item: l.item, qty: l.qty, cost: l.cost, comment: l.comment }));
       state.comments = comments.map(c => ({ id: c.id, author: c.author, text: c.text, date: c.date }));
     } catch (err) {
@@ -3955,7 +3991,7 @@
       accMovement.credit.out += Number(p.amount || 0);
     });
     dayPurchases.forEach(p => { accMovement[p.account || 'cash'].out += (p.qty * p.cost); });
-    dayExpenses.forEach(e => { accMovement[e.account || 'cash'].out += Number(e.amount || 0); });
+    dayExpenses.forEach(e => { const m = accMovement[e.account || 'cash']; if (m) m.out += Number(e.amount || 0); });
     dayCash.forEach(c => { accMovement[c.account || 'cash'].in += Number(c.amount || 0); });
     dayTransfers.forEach(t => {
       if(accMovement[t.from]) accMovement[t.from].out += Number(t.amount || 0);
@@ -4320,31 +4356,82 @@
     });
   }
 
+  // ---- Pumice types (the dropdown of what kind of pumice) ----
+  function fillPumiceTypeSelects() {
+    ['pm-s-type', 'pm-p-type', 'pm-e-type'].forEach(id => {
+      const sel = document.getElementById(id); if (!sel) return;
+      const keep = sel.value;
+      sel.innerHTML = '<option value="">— choose type —</option>'
+        + state.pumiceTypes.map(t => `<option value="${reEsc(t.name)}">${reEsc(t.name)}</option>`).join('')
+        + '<option value="__new__">＋ Add a new type…</option>';
+      if (keep && keep !== '__new__' && state.pumiceTypes.some(t => t.name === keep)) sel.value = keep;
+    });
+  }
+  async function addPumiceType(name) {
+    name = (name || '').trim(); if (!name) return null;
+    const existing = state.pumiceTypes.find(t => t.name.toLowerCase() === name.toLowerCase());
+    if (existing) return existing.name;
+    try {
+      const c = await apiRequest('/api/pumice-types', { method: 'POST', body: JSON.stringify({ name }) });
+      state.pumiceTypes.push({ id: c.id, name: c.name });
+      state.pumiceTypes.sort((a, b) => a.name.localeCompare(b.name));
+      return c.name;
+    } catch (err) { alert('Could not save the new type: ' + (err.message || 'unknown error')); return null; }
+  }
+  // newest price we have for this type, to pre-fill the price box
+  function lastPumicePrice(type, kind) {
+    const rows = state.pumice.filter(p => p.type === kind && p.item === type && Number(p.qty) > 0)
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)) || b.id - a.id);
+    return rows.length ? Math.round((rows[0].amount / rows[0].qty) * 100) / 100 : 0;
+  }
+  function avgPumiceBuyPrice(type) {
+    const rows = state.pumice.filter(p => p.type === 'purchase' && p.item === type && Number(p.qty) > 0);
+    const q = rows.reduce((s, r) => s + Number(r.qty), 0);
+    return q ? Math.round((rows.reduce((s, r) => s + Number(r.amount), 0) / q) * 100) / 100 : 0;
+  }
+  async function onPumiceTypeChange(sel) {
+    if (sel.value === '__new__') {
+      const name = prompt('Name of the new pumice type (e.g. Grade A, Fine, Rough):');
+      const created = name ? await addPumiceType(name) : null;
+      fillPumiceTypeSelects();
+      sel.value = created || '';
+    }
+    const t = sel.value; if (!t) return;
+    if (sel.id === 'pm-s-type') { const pr = lastPumicePrice(t, 'sale'); if (pr) document.getElementById('pm-s-price').value = pr; }
+    if (sel.id === 'pm-p-type') { const pr = lastPumicePrice(t, 'purchase'); if (pr) document.getElementById('pm-p-price').value = pr; }
+    if (sel.id === 'pm-e-type') { const pr = avgPumiceBuyPrice(t); if (pr) document.getElementById('pm-e-unit').value = pr; }
+  }
+  function togglePumiceExpenseKind() {
+    const qty = document.getElementById('pm-e-kind').value === 'qty';
+    ['pm-e-type-box', 'pm-e-qty-box', 'pm-e-unit-box'].forEach(id => document.getElementById(id).classList.toggle('hidden', !qty));
+    document.getElementById('pm-e-plain-box').classList.toggle('hidden', qty);
+    document.getElementById('pm-e-desc-label').textContent = qty ? 'Reason (e.g. broken in transit)' : 'Description';
+    document.getElementById('pm-e-desc').placeholder = qty ? 'e.g. Broken while loading' : 'e.g. Transport / Labor';
+  }
+  async function savePumiceRecord(body) {
+    if (isServerMode()) {
+      try {
+        const created = await apiRequest('/api/pumice', { method: 'POST', body: JSON.stringify(body) });
+        state.pumice.unshift({ id: created.id, date: created.date, type: created.type, desc: created.desc, qty: created.qty, amount: created.amount, item: created.item || '' });
+      } catch (err) { alert('Could not save to server: ' + (err.message || 'unknown error')); return false; }
+    } else {
+      state.pumice.unshift({ id: nextId(), ...body });
+    }
+    saveStateToStorage();
+    renderAll();
+    return true;
+  }
+
   async function addPumiceSale(e){
     e.preventDefault();
     const customer = document.getElementById('pm-s-customer').value.trim();
+    const item = document.getElementById('pm-s-type').value;
+    if (!item || item === '__new__') { alert('Choose the type of pumice you sold.'); return; }
     const date = document.getElementById('pm-s-date').value || todayStr();
     const qty = Number(document.getElementById('pm-s-qty').value) || 1;
     const price = Number(document.getElementById('pm-s-price').value) || 0;
-    const amount = qty * price;
-
-    if (isServerMode()) {
-      try {
-        const created = await apiRequest('/api/pumice', {
-          method: 'POST',
-          body: JSON.stringify({ date, type: 'sale', desc: customer, qty, amount })
-        });
-        state.pumice.unshift({ id: created.id, date: created.date, type: created.type, desc: created.desc, qty: created.qty, amount: created.amount });
-      } catch (err) {
-        alert('Could not save to server: ' + (err.message || 'unknown error'));
-        return;
-      }
-    } else {
-      state.pumice.unshift({ id: nextId(), date, type: 'sale', desc: customer, qty, amount });
-    }
-
-    saveStateToStorage();
-    renderAll();
+    const ok = await savePumiceRecord({ date, type: 'sale', desc: customer, qty, amount: Math.round(qty * price * 100) / 100, item });
+    if (!ok) return;
     document.getElementById('pm-s-customer').value = '';
     document.getElementById('pm-s-qty').value = '1';
     document.getElementById('pm-s-price').value = '';
@@ -4353,59 +4440,42 @@
   async function addPumicePurchase(e){
     e.preventDefault();
     const desc = document.getElementById('pm-p-desc').value.trim();
+    const item = document.getElementById('pm-p-type').value;
+    if (!item || item === '__new__') { alert('Choose the type of pumice you bought.'); return; }
     const date = document.getElementById('pm-p-date').value || todayStr();
     const qty = Number(document.getElementById('pm-p-qty').value) || 1;
-    const amt = Number(document.getElementById('pm-p-amount').value) || 0;
-
-    if (isServerMode()) {
-      try {
-        const created = await apiRequest('/api/pumice', {
-          method: 'POST',
-          body: JSON.stringify({ date, type: 'purchase', desc, qty, amount: amt })
-        });
-        state.pumice.unshift({ id: created.id, date: created.date, type: created.type, desc: created.desc, qty: created.qty, amount: created.amount });
-      } catch (err) {
-        alert('Could not save to server: ' + (err.message || 'unknown error'));
-        return;
-      }
-    } else {
-      state.pumice.unshift({ id: nextId(), date, type: 'purchase', desc, qty, amount: amt });
-    }
-
-    saveStateToStorage();
-    renderAll();
+    const price = Number(document.getElementById('pm-p-price').value) || 0;
+    const ok = await savePumiceRecord({ date, type: 'purchase', desc, qty, amount: Math.round(qty * price * 100) / 100, item });
+    if (!ok) return;
     document.getElementById('pm-p-desc').value = '';
     document.getElementById('pm-p-qty').value = '1';
-    document.getElementById('pm-p-amount').value = '';
+    document.getElementById('pm-p-price').value = '';
   }
 
   async function addPumiceExpense(e){
     e.preventDefault();
     const desc = document.getElementById('pm-e-desc').value.trim();
     const date = document.getElementById('pm-e-date').value || todayStr();
-    const qty = Number(document.getElementById('pm-e-qty').value) || 1;
-    const amt = Number(document.getElementById('pm-e-amount').value) || 0;
-
-    if (isServerMode()) {
-      try {
-        const created = await apiRequest('/api/pumice', {
-          method: 'POST',
-          body: JSON.stringify({ date, type: 'expense', desc, qty, amount: amt })
-        });
-        state.pumice.unshift({ id: created.id, date: created.date, type: created.type, desc: created.desc, qty: created.qty, amount: created.amount });
-      } catch (err) {
-        alert('Could not save to server: ' + (err.message || 'unknown error'));
-        return;
-      }
+    const withQty = document.getElementById('pm-e-kind').value === 'qty';
+    let body;
+    if (withQty) {
+      const item = document.getElementById('pm-e-type').value;
+      if (!item || item === '__new__') { alert('Choose the type of pumice that was damaged or lost.'); return; }
+      const qty = Number(document.getElementById('pm-e-qty').value) || 0;
+      const unit = Number(document.getElementById('pm-e-unit').value) || 0;
+      if (qty <= 0) { alert('Enter how many were lost.'); return; }
+      body = { date, type: 'expense', desc, qty, amount: Math.round(qty * unit * 100) / 100, item };
     } else {
-      state.pumice.unshift({ id: nextId(), date, type: 'expense', desc, qty, amount: amt });
+      const amt = Number(document.getElementById('pm-e-amount').value) || 0;
+      if (amt <= 0) { alert('Enter the amount.'); return; }
+      body = { date, type: 'expense', desc, qty: 0, amount: amt, item: '' };
     }
-
-    saveStateToStorage();
-    renderAll();
+    const ok = await savePumiceRecord(body);
+    if (!ok) return;
     document.getElementById('pm-e-desc').value = '';
     document.getElementById('pm-e-qty').value = '1';
     document.getElementById('pm-e-amount').value = '';
+    document.getElementById('pm-e-unit').value = '';
   }
 
   async function addPumiceWithdrawal(e){
@@ -4461,24 +4531,24 @@
   function exportPumiceSalesCSV(){
     exportToCSV(
       `pumice-sales-${todayStr()}.csv`,
-      ['Date', 'Customer', 'Qty', 'Amount'],
-      state.pumice.filter(p => p.type === 'sale').map(p => [p.date, p.desc, p.qty || 1, p.amount])
+      ['Date', 'Customer', 'Type', 'Qty', 'Price each', 'Amount'],
+      state.pumice.filter(p => p.type === 'sale').map(p => [p.date, p.desc, p.item || '', p.qty || 1, Math.round((p.amount / (p.qty || 1)) * 100) / 100, p.amount])
     );
   }
 
   function exportPumicePurchasesCSV(){
     exportToCSV(
       `pumice-purchases-${todayStr()}.csv`,
-      ['Date', 'Vendor / Description', 'Qty', 'Amount'],
-      state.pumice.filter(p => p.type === 'purchase').map(p => [p.date, p.desc, p.qty || 1, p.amount])
+      ['Date', 'Vendor / Note', 'Type', 'Qty', 'Price each', 'Amount'],
+      state.pumice.filter(p => p.type === 'purchase').map(p => [p.date, p.desc, p.item || '', p.qty || 1, Math.round((p.amount / (p.qty || 1)) * 100) / 100, p.amount])
     );
   }
 
   function exportPumiceExpensesCSV(){
     exportToCSV(
       `pumice-expenses-${todayStr()}.csv`,
-      ['Date', 'Description', 'Qty', 'Amount'],
-      state.pumice.filter(p => p.type === 'expense').map(p => [p.date, p.desc, p.qty || 1, p.amount])
+      ['Date', 'Description', 'Kind', 'Type', 'Qty', 'Amount'],
+      state.pumice.filter(p => p.type === 'expense').map(p => [p.date, p.desc, p.item ? 'Damaged / lost' : 'Plain', p.item || '', p.item ? p.qty : '', p.amount])
     );
   }
 
@@ -4527,7 +4597,32 @@
     renderAll();
   }
 
+  // damaged/lost pumice is a loss, not a payment: it must not reduce the M-Pesa balance
+  function isPumiceWriteOff(p) { return p.type === 'expense' && !!p.item; }
+  function isWriteOff(e) { return !!e.item && e.account === 'writeoff'; }
+
+  function renderPumiceStock() {
+    const body = document.getElementById('pm-stock-body'); if (!body) return;
+    const t = {};
+    const row = k => (t[k] = t[k] || { bq: 0, ba: 0, sq: 0, sa: 0, lq: 0 });
+    state.pumice.forEach(p => {
+      const k = p.item || '(no type)';
+      if (p.type === 'purchase') { row(k).bq += Number(p.qty) || 0; row(k).ba += Number(p.amount) || 0; }
+      else if (p.type === 'sale') { row(k).sq += Number(p.qty) || 0; row(k).sa += Number(p.amount) || 0; }
+      else if (p.type === 'expense' && p.item) { row(k).lq += Number(p.qty) || 0; }
+    });
+    const keys = Object.keys(t).sort();
+    const n = v => Math.round(v * 100) / 100;
+    body.innerHTML = keys.length ? keys.map(k => {
+      const r = t[k], stock = n(r.bq - r.sq - r.lq);
+      return `<tr><td><strong>${reEsc(k)}</strong></td><td class="num mono">${n(r.bq)}</td><td class="num mono">${r.bq ? fmt(n(r.ba / r.bq)) : '—'}</td>
+        <td class="num mono">${n(r.sq)}</td><td class="num mono">${r.sq ? fmt(n(r.sa / r.sq)) : '—'}</td>
+        <td class="num mono">${n(r.lq)}</td><td class="num mono ${stock < 0 ? 'red' : ''}">${stock}</td></tr>`;
+    }).join('') : '<tr class="empty-row"><td colspan="7">Log a Pumice purchase to see stock here.</td></tr>';
+  }
+
   function renderPumice(){
+  fillPumiceTypeSelects();
     const period = state.pumicePeriod;
     const filtered = filterPumiceByPeriod(state.pumice, period);
 
@@ -4544,6 +4639,7 @@
     // Singular M-Pesa Cash stored
     let mpesaVault = 0;
     state.pumice.forEach(p => {
+      if (isPumiceWriteOff(p)) return;
       if(p.type === 'sale') mpesaVault += p.amount;
       else mpesaVault -= p.amount;
     });
@@ -4572,6 +4668,7 @@
     document.getElementById('pm-total-withdrawn').textContent = fmt(totWithdrawn);
     document.getElementById('pm-withdrawn-sub').textContent = `${allWithdrawals.length} withdrawal${allWithdrawals.length !== 1 ? 's' : ''}`;
     renderPumiceWithdrawals();
+    renderPumiceStock();
 
     const salesBody = document.getElementById('pm-sales-ledger-body');
     const purchasesBody = document.getElementById('pm-purchases-ledger-body');
@@ -4582,7 +4679,7 @@
       const from = document.getElementById(fromId)?.value;
       const to = document.getElementById(toId)?.value;
       return records.filter(p => {
-        if (q && !(p.desc || '').toLowerCase().includes(q)) return false;
+        if (q && !((p.desc || '') + ' ' + (p.item || '')).toLowerCase().includes(q)) return false;
         if (from && p.date < from) return false;
         if (to && p.date > to) return false;
         return true;
@@ -4594,36 +4691,42 @@
     const allExpenses = applyPumiceFilters(state.pumice.filter(p => p.type === 'expense'), 'pm-e-search-query', 'pm-e-filter-from', 'pm-e-filter-to');
 
     salesBody.innerHTML = allSales.length === 0
-      ? '<tr class="empty-row"><td colspan="5">No Pumice sales match your filters.</td></tr>'
+      ? '<tr class="empty-row"><td colspan="7">No Pumice sales match your filters.</td></tr>'
       : allSales.map(p => `
         <tr>
           <td>${p.date}</td>
           <td>${p.desc}</td>
+          <td>${p.item ? reEsc(p.item) : '<span class="muted">—</span>'}</td>
           <td class="num mono">${p.qty || 1}</td>
+          <td class="num mono">${fmt(Math.round((p.amount / (p.qty || 1)) * 100) / 100)}</td>
           <td class="num mono green">+${fmt(p.amount)}</td>
           <td style="text-align:center;"><button class="row-edit" onclick="editPumice(${p.id})" title="Edit">✏</button><button class="row-del" onclick="deletePumice(${p.id})">✕</button></td>
         </tr>
       `).join('');
 
     purchasesBody.innerHTML = allPurchases.length === 0
-      ? '<tr class="empty-row"><td colspan="5">No Pumice purchases match your filters.</td></tr>'
+      ? '<tr class="empty-row"><td colspan="7">No Pumice purchases match your filters.</td></tr>'
       : allPurchases.map(p => `
         <tr>
           <td>${p.date}</td>
           <td>${p.desc}</td>
+          <td>${p.item ? reEsc(p.item) : '<span class="muted">—</span>'}</td>
           <td class="num mono">${p.qty || 1}</td>
+          <td class="num mono">${fmt(Math.round((p.amount / (p.qty || 1)) * 100) / 100)}</td>
           <td class="num mono red">-${fmt(p.amount)}</td>
           <td style="text-align:center;"><button class="row-edit" onclick="editPumice(${p.id})" title="Edit">✏</button><button class="row-del" onclick="deletePumice(${p.id})">✕</button></td>
         </tr>
       `).join('');
 
     expensesBody.innerHTML = allExpenses.length === 0
-      ? '<tr class="empty-row"><td colspan="5">No Pumice expenses match your filters.</td></tr>'
+      ? '<tr class="empty-row"><td colspan="7">No Pumice expenses match your filters.</td></tr>'
       : allExpenses.map(p => `
         <tr>
           <td>${p.date}</td>
           <td>${p.desc}</td>
-          <td class="num mono">${p.qty || 1}</td>
+          <td>${p.item ? '<span style="color:var(--amber,#f5b942);">Damaged / lost · ' + reEsc(p.item) + '</span>' : 'Plain'}</td>
+          <td class="num mono">${p.item ? p.qty : '—'}</td>
+          <td class="num mono">${p.item && p.qty ? fmt(Math.round((p.amount / p.qty) * 100) / 100) : '—'}</td>
           <td class="num mono red">-${fmt(p.amount)}</td>
 
           <td style="text-align:center;"><button class="row-edit" onclick="editPumice(${p.id})" title="Edit">✏</button><button class="row-del" onclick="deletePumice(${p.id})">✕</button></td>
@@ -4930,6 +5033,12 @@
       items[cs.item].sold += Number(cs.qty);
     });
 
+    state.expenses.forEach(e => {
+      if (!e.item || !(Number(e.qty) > 0)) return;
+      if(!items[e.item]) items[e.item] = { purchased: 0, sold: 0, totalCost: 0, countCost: 0, category: 'General' };
+      items[e.item].lost = (items[e.item].lost || 0) + Number(e.qty);
+    });
+
     state.manualStockLogs.forEach(l => {
       if(!items[l.item]) items[l.item] = { purchased: 0, sold: 0, totalCost: 0, countCost: 0, category: 'General' };
       if(l.type === 'add') {
@@ -4963,7 +5072,7 @@
     let html = '';
     keys.forEach(k => {
       const it = items[k];
-      const stock = it.purchased - it.sold;
+      const stock = it.purchased - it.sold - (it.lost || 0);
       const avgCost = it.countCost > 0 ? (it.totalCost / it.countCost) : 0;
       const stockVal = stock > 0 ? stock * avgCost : 0;
 
@@ -4974,7 +5083,7 @@
       html += `<tr>
         <td><strong>${k}</strong></td>
         <td class="num mono">${it.purchased}</td>
-        <td class="num mono">${it.sold}</td>
+        <td class="num mono">${it.sold}${it.lost ? ' <span class="sub" title="damaged / lost">(+' + it.lost + ' lost)</span>' : ''}</td>
         <td class="num mono"><strong>${stock}</strong></td>
         <td class="num mono">${fmt(avgCost)}</td>
         <td class="num mono">${fmt(stockVal)}</td>
@@ -5725,8 +5834,9 @@
   function editPumice(id){
     quickEditRecord('pumice', state.pumice, id, [
       { key: 'desc', label: 'Description' },
+      { key: 'item', label: 'Pumice type' },
       { key: 'qty', label: 'Quantity', numeric: true },
-      { key: 'amount', label: 'Amount', numeric: true },
+      { key: 'amount', label: 'Total amount', numeric: true },
     ]);
   }
 
@@ -6094,6 +6204,7 @@
             <div><b>${reEsc(m.name)}</b> ${m.is_owner ? '<span class="sub" style="color:var(--cyan);">· Owner</span>' : ''}${m.disabled ? ' <span class="sub" style="color:var(--red,#dc2626);">· Access off</span>' : ''}</div>
             <div class="sub" style="overflow:hidden; text-overflow:ellipsis;">${reEsc(m.email)}</div>
           </div>
+          ${t.me_is_owner && !m.disabled ? `<button class="btn btn-secondary btn-small" title="Daily business summary email at 8 pm" onclick="setSummaryEmail(${m.id}, ${m.summary ? 'false' : 'true'})">📧 Daily email: ${m.summary ? 'On' : 'Off'}</button>` : ''}
           ${t.me_is_owner && !m.is_owner ? `<button class="btn btn-secondary btn-small" onclick="setTeamAccess(${m.id}, ${m.disabled ? 'true' : 'false'})">${m.disabled ? 'Restore access' : 'Remove access'}</button>` : ''}
         </div>`).join('') || '<span class="muted" style="padding:12px; display:block;">No members yet.</span>';
       inv.innerHTML = t.invites.length ? '<div class="sub" style="margin-bottom:6px;">Invited, not joined yet</div>' + t.invites.map(i => `
@@ -6144,6 +6255,10 @@
     if (!confirm('Withdraw the invite for ' + email + '?')) return;
     try { await apiRequest('/api/team/invite', { method: 'DELETE', body: JSON.stringify({ email }) }); loadTeam(); }
     catch (err) { teamMsg(err.message || 'Could not withdraw the invite.', false); }
+  }
+  async function setSummaryEmail(id, on) {
+    try { await apiRequest('/api/team/users/' + id + '/summary', { method: 'POST', body: JSON.stringify({ enabled: on }) }); loadTeam(); }
+    catch (err) { teamMsg(err.message || 'Could not change this.', false); }
   }
   async function setTeamAccess(id, enable) {
     if (!confirm(enable ? 'Restore this person\'s access?' : 'Remove this person\'s access? They will be signed out and cannot sign in again. Their records stay.')) return;
@@ -6449,29 +6564,50 @@
   // ---------------------------------------------------------------
   // EXPENSES
   // ---------------------------------------------------------------
+  function toggleExpenseKind() {
+    const qty = document.getElementById('e-kind').value === 'qty';
+    ['e-item-box', 'e-qty-box', 'e-unit-box', 'e-writeoff-note'].forEach(id => document.getElementById(id).classList.toggle('hidden', !qty));
+    ['e-amount-box', 'e-category-box', 'e-account-box'].forEach(id => document.getElementById(id).classList.toggle('hidden', qty));
+    document.getElementById('e-name-label').textContent = qty ? 'Reason (e.g. broken, expired)' : 'Expense Name';
+    document.getElementById('e-name').placeholder = qty ? 'e.g. Broken while offloading' : 'e.g. Electricity bill';
+  }
+  function onExpenseItemChange() {
+    const v = document.getElementById('e-item').value.trim().toLowerCase();
+    const prod = state.products.find(p => p.name.toLowerCase() === v);
+    if (prod && prod.cost > 0) document.getElementById('e-unit').value = prod.cost;
+  }
+
   async function addExpense(e){
     e.preventDefault();
     const name = document.getElementById('e-name').value.trim();
-    const amt = Number(document.getElementById('e-amount').value) || 0;
     const date = document.getElementById('e-date').value || todayStr();
-    const category = document.getElementById('e-category').value;
-    const account = document.getElementById('e-account').value;
-
-    if(!name || amt <= 0) return;
+    const withQty = document.getElementById('e-kind').value === 'qty';
+    let payload;
+    if (withQty) {
+      const item = document.getElementById('e-item').value.trim();
+      const qty = Number(document.getElementById('e-qty').value) || 0;
+      const unit = Number(document.getElementById('e-unit').value) || 0;
+      if (!item) { alert('Pick the product that was damaged or lost.'); return; }
+      if (!state.products.some(p => p.name.toLowerCase() === item.toLowerCase())) { alert('"' + item + '" is not in your product list. Pick one from the list so stock can be reduced.'); return; }
+      if (qty <= 0) { alert('Enter how many were lost.'); return; }
+      const prod = state.products.find(p => p.name.toLowerCase() === item.toLowerCase());
+      payload = { date, name: name || 'Damaged / lost', category: 'Damaged goods', amount: Math.round(qty * unit * 100) / 100, account: 'writeoff', item: prod.name, qty };
+    } else {
+      const amt = Number(document.getElementById('e-amount').value) || 0;
+      if (!name || amt <= 0) { alert('Enter the expense name and amount.'); return; }
+      payload = { date, name, category: document.getElementById('e-category').value, amount: amt, account: document.getElementById('e-account').value, item: '', qty: 0 };
+    }
 
     if (isServerMode()) {
       try {
-        const created = await apiRequest('/api/expenses', {
-          method: 'POST',
-          body: JSON.stringify({ date, name, category, amount: amt, account })
-        });
-        state.expenses.unshift({ id: created.id, name: created.name, amount: created.amount, date: created.date, category: created.category, account: created.account });
+        const created = await apiRequest('/api/expenses', { method: 'POST', body: JSON.stringify(payload) });
+        state.expenses.unshift({ id: created.id, name: created.name, amount: created.amount, date: created.date, category: created.category, account: created.account, item: created.item || '', qty: created.qty || 0 });
       } catch (err) {
         alert('Could not save to server: ' + (err.message || 'unknown error'));
         return;
       }
     } else {
-      state.expenses.unshift({ id: nextId(), name, amount: amt, date, category, account });
+      state.expenses.unshift({ id: nextId(), ...payload });
     }
 
     saveStateToStorage();
@@ -6479,6 +6615,9 @@
 
     document.getElementById('e-name').value = '';
     document.getElementById('e-amount').value = '';
+    document.getElementById('e-item').value = '';
+    document.getElementById('e-qty').value = '1';
+    document.getElementById('e-unit').value = '';
   }
 
   async function addExpenseFromProfit(e){
@@ -6556,7 +6695,7 @@
     const to = document.getElementById('e-filter-to').value;
 
     const filtered = state.expenses.filter(e => {
-      const matchQ = !q || e.name.toLowerCase().includes(q) || (e.category && e.category.toLowerCase().includes(q));
+      const matchQ = !q || e.name.toLowerCase().includes(q) || (e.category && e.category.toLowerCase().includes(q)) || (e.item && e.item.toLowerCase().includes(q));
       const matchFrom = !from || e.date >= from;
       const matchTo = !to || e.date <= to;
       return matchQ && matchFrom && matchTo;
@@ -6567,7 +6706,7 @@
 
     const body = document.getElementById('expenses-body');
     if(filtered.length === 0){
-      body.innerHTML = '<tr class="empty-row"><td colspan="6">No expenses match criteria.</td></tr>';
+      body.innerHTML = '<tr class="empty-row"><td colspan="7">No expenses match criteria.</td></tr>';
       return;
     }
 
@@ -6576,7 +6715,8 @@
         <td>${e.date}</td>
         <td><strong>${e.name}</strong></td>
         <td>${e.category || 'General'}</td>
-        <td>${accountLabels[e.account || 'cash']}</td>
+        <td>${accountLabels[e.account || 'cash'] || e.account}</td>
+        <td class="num mono">${e.item ? reEsc(e.item) + ' × ' + e.qty : '—'}</td>
         <td class="num mono red">${fmt(e.amount)}</td>
         <td style="text-align:center;"><button class="row-edit" onclick="editExpense(${e.id})" title="Edit">✏</button><button class="row-del" onclick="deleteExpense(${e.id})">✕</button></td>
       </tr>
@@ -7114,7 +7254,8 @@
     state.expenses.forEach(e => {
       const amt = Number(e.amount) || 0;
       totalGenExpenses += amt;
-      if(accounts[e.account] !== undefined) accounts[e.account] -= amt;
+      if (isWriteOff(e)) { /* loss only: money was spent when the goods were bought */ }
+      else if(accounts[e.account] !== undefined) accounts[e.account] -= amt;
       else accounts.cash -= amt;
     });
 
@@ -7134,6 +7275,7 @@
 
     // Pumice M-Pesa Vault addition
     state.pumice.forEach(p => {
+      if (isPumiceWriteOff(p)) return;
       if(p.type === 'sale') accounts.mpesa += p.amount;
       else accounts.mpesa -= p.amount;
     });
@@ -7143,7 +7285,7 @@
     let totalStockUnits = 0;
     let totalStockValue = 0;
     Object.keys(invData).forEach(k => {
-      const stock = invData[k].purchased - invData[k].sold;
+      const stock = invData[k].purchased - invData[k].sold - (invData[k].lost || 0);
       if(stock > 0){
         totalStockUnits += stock;
         const avgCost = invData[k].countCost > 0 ? (invData[k].totalCost / invData[k].countCost) : 0;
@@ -7420,15 +7562,15 @@
     add('Purchases', ['Date', 'Supplier', 'Item', 'Qty', 'Unit cost', 'Total', 'Paid from'],
       state.purchases.slice().sort(byDate).map((x, i) => [x.date, x.supplier || '', x.item, x.qty, x.cost, { f: `D${i + 2}*E${i + 2}` }, accountLabels[x.account] || x.account]),
       [12, 20, 24, 8, 12, 14, 18]);
-    add('Expenses', ['Date', 'Expense', 'Category', 'Amount', 'Paid from'],
-      state.expenses.slice().sort(byDate).map(x => [x.date, x.name, x.category || '', Number(x.amount) || 0, accountLabels[x.account] || x.account]),
-      [12, 28, 18, 14, 18]);
+    add('Expenses', ['Date', 'Expense', 'Category', 'Damaged item', 'Qty', 'Amount', 'Paid from'],
+      state.expenses.slice().sort(byDate).map(x => [x.date, x.name, x.category || '', x.item || '', x.item ? x.qty : '', Number(x.amount) || 0, accountLabels[x.account] || x.account]),
+      [12, 28, 18, 18, 8, 14, 18]);
     add('Loans (credit sales)', ['Date', 'Customer', 'Item', 'Qty', 'Unit price', 'Total', 'Paid so far', 'Still owed'],
       state.creditSales.slice().sort(byDate).map(x => [x.date, x.customer || '', x.item, x.qty, x.price, Number(x.total) || 0, Number(x.paid) || 0, Number(x.remaining) || 0]),
       [12, 20, 24, 8, 12, 14, 14, 14]);
-    add('Pumice', ['Date', 'Type', 'Description', 'Qty', 'Amount'],
-      state.pumice.slice().sort(byDate).map(x => [x.date, x.type, x.desc || '', x.qty || '', Number(x.amount) || 0]),
-      [12, 12, 28, 8, 14]);
+    add('Pumice', ['Date', 'Kind', 'Pumice type', 'Description', 'Qty', 'Amount'],
+      state.pumice.slice().sort(byDate).map(x => [x.date, x.type, x.item || '', x.desc || '', x.qty || '', Number(x.amount) || 0]),
+      [12, 12, 16, 28, 8, 14]);
     return wb;
   }
   async function exportExcelWorkbook() {
