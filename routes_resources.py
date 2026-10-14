@@ -180,6 +180,11 @@ register_simple_resource(
 )
 
 register_simple_resource(
+    "customer-contacts", "customer_contacts",
+    fields=["name", "phone"],
+)
+
+register_simple_resource(
     "pumice-types", "pumice_types",
     fields=["name"],
 )

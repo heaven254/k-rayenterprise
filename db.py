@@ -242,6 +242,12 @@ CREATE TABLE IF NOT EXISTS pumice_types (
     user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name      TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS customer_contacts (
+    id        SERIAL PRIMARY KEY,
+    user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name      TEXT NOT NULL,
+    phone     TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS allowed_emails (
     email     TEXT PRIMARY KEY,
     added_by  TEXT,

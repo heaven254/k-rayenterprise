@@ -27,6 +27,7 @@ TABLES = {
     "transfers":   ["id", "date", "from_account", "to_account", "amount", "note"],
     "pumice":      ["id", "date", "type", "item_desc", "qty", "amount", "item"],
     "pumice_types": ["id", "name"],
+    "customer_contacts": ["id", "name", "phone"],
     "stock_logs":  ["id", "date", "type", "item", "qty", "cost", "comment"],
     "comments":    ["id", "author", "text", "date"],
     "reconciliations": ["id", "date", "account", "expected", "counted", "difference", "note", "checked_by", "adjusted"],
@@ -35,9 +36,9 @@ TABLES = {
 NO_USER = {"credit_payments"}
 # delete children first, insert parents first
 DELETE_ORDER = ["credit_payments", "credit_sales", "sales", "purchases", "products",
-                "expenses", "cash", "transfers", "pumice", "pumice_types", "stock_logs", "comments", "reconciliations"]
+                "expenses", "cash", "transfers", "pumice", "pumice_types", "customer_contacts", "stock_logs", "comments", "reconciliations"]
 INSERT_ORDER = ["products", "purchases", "sales", "credit_sales", "credit_payments",
-                "expenses", "cash", "transfers", "pumice", "pumice_types", "stock_logs", "comments", "reconciliations"]
+                "expenses", "cash", "transfers", "pumice", "pumice_types", "customer_contacts", "stock_logs", "comments", "reconciliations"]
 
 
 def build_backup(created_by):
