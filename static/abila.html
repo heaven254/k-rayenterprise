@@ -1250,6 +1250,8 @@
       </div>
     </div>
 
+    <div id="yesterday-notice" style="display:none;margin:0 0 14px;padding:12px 14px;border-radius:10px;background:#fff7e6;border:1px solid #f5b942;color:#5c3d00;font-size:14px;"></div>
+
     <!-- OVERVIEW -->
     <div class="section active" id="section-overview">
       <div class="stat-grid">
@@ -7916,7 +7918,20 @@
   // ---------------------------------------------------------------
   window.addEventListener('load', () => { initGoogleSignIn(); });
 
+  function renderYesterdayNotice(){
+    const el = document.getElementById('yesterday-notice'); if (!el) return;
+    const nb = new Date(Date.now() + 3*3600*1000);          // Nairobi clock
+    const y = new Date(nb.getTime() - 24*3600*1000).toISOString().slice(0,10);
+    const hasAny = (state.sales||[]).some(r => (r.date||'').startsWith(y))
+      || (state.creditSales||[]).some(r => (r.date||'').startsWith(y))
+      || (state.pumice||[]).some(r => r.type === 'sale' && (r.date||'').startsWith(y));
+    if (nb.getUTCHours() >= 11 || hasAny) { el.style.display = 'none'; return; }
+    el.style.display = 'block';
+    el.innerHTML = `⚠ <b>No sales were recorded for yesterday (${y}).</b> If you traded, add them now and choose <b>${y}</b> as the date. A corrected summary is emailed at 11:00 this morning.`;
+  }
+
   function renderAll(){
+    renderYesterdayNotice();
     populateProductDropdowns();
     renderProductCatalog();
     renderInventory();
