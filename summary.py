@@ -10,6 +10,11 @@ Env vars (all optional):
   KRAY_DAILY_SUMMARY   "off" to disable (default on)
   KRAY_SUMMARY_HOUR    hour 0-23, Nairobi time (default 20)
   KRAY_SUMMARY_TO      comma-separated recipients (default: all verified users)
+  KRAY_FINAL_HOUR      hour 0-23, Nairobi time (default 11): the morning "last call" for yesterday
+
+Late entries: at KRAY_FINAL_HOUR the next morning, yesterday's numbers are rebuilt. If they differ from
+what the evening email showed (sales added late, a back-dated entry, an edit), a corrected
+"UPDATED" summary for yesterday is emailed. If nothing changed, nothing is sent.
 """
 import os
 import time
@@ -27,11 +32,13 @@ bp = Blueprint("summary", __name__, url_prefix="/api")
 EAT = datetime.timedelta(hours=3)
 ENABLED = os.environ.get("KRAY_DAILY_SUMMARY", "on").strip().lower() != "off"
 SUMMARY_HOUR = int(os.environ.get("KRAY_SUMMARY_HOUR", "20") or 20)
+FINAL_HOUR = int(os.environ.get("KRAY_FINAL_HOUR", "11") or 11)
 OVERRIDE_TO = [e.strip() for e in os.environ.get("KRAY_SUMMARY_TO", "").split(",") if e.strip()]
 
 ACCOUNTS = {"pochi": "Pochi La Biashara", "mpesa": "M-Pesa", "cash": "Cash", "moneybox": "Moneybox"}
 
 _sent_day = None
+_final_day = None
 _last_attempt = 0.0
 _lock = threading.Lock()
 
@@ -131,6 +138,14 @@ def build_summary(day):
 MAX_CUSTOMERS = 30
 
 
+def fingerprint(s):
+    """Short signature of a day's numbers, to tell whether anything changed after the evening email."""
+    import hashlib, json
+    key = [round(s[k], 2) for k in ("cash_sales", "credit_goods", "purchases", "expenses", "repaid")]
+    key += [s["receipts"], len(s["customers"])] + [round(v, 2) for v in sorted(s["pumice"].values())]
+    return hashlib.sha1(json.dumps(key).encode()).hexdigest()[:16]
+
+
 def _customer_line(c):
     bits = []
     if c["total"]:
@@ -144,10 +159,12 @@ def _customer_line(c):
     return f"{c['name']} — " + ", ".join(bits) + f" ({len(c['visits'])} visit(s))"
 
 
-def render(s):
+def render(s, updated=False):
     d = datetime.date.fromisoformat(s["day"])
     pretty = d.strftime("%A %d %B %Y")
     subject = f"K-Ray daily summary — {d.strftime('%a %d %b')}: sales {kes(s['total_sales'])}"
+    if updated:
+        subject = "UPDATED — " + subject
 
     rows = [
         ("Sales", kes(s["total_sales"]), f"{s['receipts']} receipt(s)"),
@@ -159,6 +176,8 @@ def render(s):
         ("Net for the day (sales − purchases − expenses)", kes(s["net"]), ""),
     ]
     lines = [f"K-Ray Enterprise — {pretty}", ""]
+    if updated:
+        lines += ["UPDATED: entries were added or changed after last night's email. These are the final numbers.", ""]
     if s["empty"]:
         lines.append("Nothing was recorded today. If the shop traded, entries are missing.")
     for label, val, note in rows:
@@ -188,6 +207,9 @@ def render(s):
         lines.append(f"Pumice today: sales {kes(p['sale'])}, purchases {kes(p['purchase'])}, expenses {kes(p['expense'])}, withdrawn {kes(p['withdrawal'])}")
         lines.append("")
     lines.append(f"Loans still owed by customers: {kes(s['loans_owed'])} ({s['loans_people']} customer(s))")
+    if not updated:
+        lines.append("")
+        lines.append(f"Missing something? You can still record today's sales (choose today's date) until {FINAL_HOUR}:00 tomorrow morning; a corrected summary is emailed then.")
     text = "\n".join(lines)
 
     # ---- HTML version ----
@@ -199,6 +221,8 @@ def render(s):
     net_color = "#16a34a" if s["net"] >= 0 else "#dc2626"
     h = [f'<div style="font-family:Arial,Helvetica,sans-serif;max-width:520px;margin:auto;color:#111;">',
          f'<h2 style="margin:0 0 4px;">K-Ray Enterprise</h2><div style="color:#666;margin-bottom:16px;">{escape(pretty)}</div>']
+    if updated:
+        h.append('<p style="background:#e8f5e9;border:1px solid #66bb6a;padding:10px;border-radius:8px;"><b>UPDATED:</b> entries were added or changed after last night\'s email. These are the final numbers.</p>')
     if s["empty"]:
         h.append('<p style="background:#fff7e6;border:1px solid #f5b942;padding:10px;border-radius:8px;">Nothing was recorded today. If the shop traded, entries are missing.</p>')
     h.append('<table style="width:100%;border-collapse:collapse;">')
@@ -246,7 +270,10 @@ def render(s):
     if s["pumice_any"]:
         p = s["pumice"]
         h.append(f'<h3 style="margin:20px 0 6px;">Pumice</h3><div style="font-size:14px;">Sales {escape(kes(p["sale"]))} · Purchases {escape(kes(p["purchase"]))} · Expenses {escape(kes(p["expense"]))} · Withdrawn {escape(kes(p["withdrawal"]))}</div>')
-    h.append(f'<p style="margin-top:20px;padding:10px;background:#f3f4f6;border-radius:8px;font-size:14px;">Loans still owed by customers: <b>{escape(kes(s["loans_owed"]))}</b> ({s["loans_people"]} customer(s))</p></div>')
+    h.append(f'<p style="margin-top:20px;padding:10px;background:#f3f4f6;border-radius:8px;font-size:14px;">Loans still owed by customers: <b>{escape(kes(s["loans_owed"]))}</b> ({s["loans_people"]} customer(s))</p>')
+    if not updated:
+        h.append(f'<p style="font-size:13px;color:#666;">Missing something? You can still record today\'s sales (choose today\'s date) until {FINAL_HOUR}:00 tomorrow morning; a corrected summary is emailed then.</p>')
+    h.append('</div>')
     return subject, text, "".join(h)
 
 
@@ -258,9 +285,9 @@ def _recipients():
         return [r["email"] for r in cur.fetchall()]
 
 
-def send_summary_to(emails, day):
+def send_summary_to(emails, day, updated=False):
     s = build_summary(day)
-    subject, text, html = render(s)
+    subject, text, html = render(s, updated)
     ok = 0
     for e in emails:
         if mailer.send_email(e, subject, text, html):
@@ -292,6 +319,11 @@ def maybe_send_daily_summary():
             return
         emails = _recipients()
         ok, total = send_summary_to(emails, day) if emails else (0, 0)
+        try:
+            with db_cursor(commit=True) as cur:
+                cur.execute("UPDATE daily_summary_log SET fp = %s WHERE day = %s", (fingerprint(build_summary(day)), day))
+        except Exception as e:
+            print(f"[SUMMARY] could not store fingerprint: {e}")
         if total and ok == 0:                    # nothing went out: release the claim so it retries
             with db_cursor(commit=True) as cur:
                 cur.execute("DELETE FROM daily_summary_log WHERE day = %s", (day,))
@@ -307,9 +339,47 @@ def maybe_send_daily_summary():
         _lock.release()
 
 
+def maybe_send_final_summary():
+    """Morning last call: re-check yesterday, email a corrected summary only if it changed."""
+    global _final_day
+    if not ENABLED or mailer.DEMO_MODE:
+        return
+    now = nairobi_now()
+    today = now.strftime("%Y-%m-%d")
+    if now.hour < FINAL_HOUR or now.hour >= SUMMARY_HOUR or _final_day == today:
+        return
+    if not _lock.acquire(blocking=False):
+        return
+    try:
+        yday = (now - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+        with db_cursor(commit=True) as cur:
+            cur.execute("INSERT INTO daily_summary_log (day, final_sent) VALUES (%s, TRUE) "
+                        "ON CONFLICT (day) DO UPDATE SET final_sent = TRUE WHERE daily_summary_log.final_sent = FALSE "
+                        "RETURNING (SELECT fp FROM daily_summary_log WHERE day = %s) AS old_fp", (yday, yday))
+            row = cur.fetchone()
+        _final_day = today
+        if row is None:                          # already handled by another worker / earlier today
+            return
+        s = build_summary(yday)
+        old_fp = row["old_fp"]
+        if (old_fp is None and s["empty"]) or (old_fp is not None and old_fp == fingerprint(s)):
+            return                               # nothing new since the evening email
+        emails = _recipients()
+        ok, total = send_summary_to(emails, yday, updated=True) if emails else (0, 0)
+        with db_cursor(commit=True) as cur:
+            cur.execute("UPDATE daily_summary_log SET fp = %s WHERE day = %s", (fingerprint(s), yday))
+        print(f"[SUMMARY] corrected summary for {yday} sent to {ok}/{total}")
+    except Exception as e:
+        print(f"[SUMMARY ERROR] final: {e}")
+    finally:
+        _lock.release()
+
+
 def trigger_in_background():
     """Non-blocking hook for the health route."""
     now = nairobi_now()
+    if ENABLED and not mailer.DEMO_MODE and FINAL_HOUR <= now.hour < SUMMARY_HOUR and _final_day != now.strftime("%Y-%m-%d"):
+        threading.Thread(target=maybe_send_final_summary, daemon=True).start()
     if not ENABLED or mailer.DEMO_MODE or now.hour < SUMMARY_HOUR or _sent_day == now.strftime("%Y-%m-%d"):
         return
     threading.Thread(target=maybe_send_daily_summary, daemon=True).start()
