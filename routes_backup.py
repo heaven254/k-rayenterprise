@@ -25,7 +25,7 @@ TABLES = {
     "expenses":    ["id", "date", "name", "category", "amount", "account", "item", "qty"],
     "cash":        ["id", "date", "source", "account", "amount", "note"],
     "transfers":   ["id", "date", "from_account", "to_account", "amount", "note"],
-    "pumice":      ["id", "date", "type", "item_desc", "qty", "amount", "item"],
+    "pumice":      ["id", "date", "type", "item_desc", "qty", "amount", "item", "account", "cash_part"],
     "pumice_types": ["id", "name"],
     "customer_contacts": ["id", "name", "phone"],
     "stock_logs":  ["id", "date", "type", "item", "qty", "cost", "comment"],

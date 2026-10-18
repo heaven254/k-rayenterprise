@@ -174,8 +174,8 @@ register_simple_resource(
 
 register_simple_resource(
     "pumice", "pumice",
-    fields=["date", "type", "desc", "qty", "amount", "item"],
-    numeric_fields=("qty", "amount"),
+    fields=["date", "type", "desc", "qty", "amount", "item", "account", "cash_part"],
+    numeric_fields=("qty", "amount", "cash_part"),
     column_map={"desc": "item_desc"},
 )
 
