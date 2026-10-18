@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<meta name="theme-color" content="#0B1220">
+<meta name="theme-color" content="#0b1a24">
+<script>try{var _t=localStorage.getItem("kray_theme")||"pro";if(_t!=="auto")document.documentElement.setAttribute("data-theme",_t);}catch(e){}</script>
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <meta name="mobile-web-app-capable" content="yes">
@@ -82,6 +83,91 @@
     --red: #DC2626;
     --red-dim: rgba(220,38,38,.12);
   }
+
+
+  /* ============ "PRO" THEME — deep blue-slate with electric green accent ============ */
+  :root[data-theme="pro"] {
+    --bg: #0f212e;
+    --panel: #1a2c38;
+    --panel-alt: #213743;
+    --line: #2f4553;
+    --line-soft: #243a48;
+    --text: #f1f5f9;
+    --text-muted: #9fb3c3;
+    --text-dim: #6f8798;
+    --cyan: #00e701;
+    --cyan-dim: rgba(0,231,1,.12);
+    --cyan-glow: rgba(0,231,1,.35);
+    --amber: #ffb43a;
+    --amber-dim: rgba(255,180,58,.14);
+    --green: #00e701;
+    --green-dim: rgba(0,231,1,.12);
+    --red: #ff5a5f;
+    --red-dim: rgba(255,90,95,.14);
+    --radius: 12px;
+  }
+  :root[data-theme="pro"] .btn-primary { background:#00e701; color:#04210a; box-shadow:0 6px 20px rgba(0,231,1,.18); }
+  :root[data-theme="pro"] .btn-primary:hover { background:#1fff20; box-shadow:0 8px 26px rgba(0,231,1,.3); }
+  :root[data-theme="pro"] .btn-secondary { background:#2f4553; border-color:#2f4553; }
+  :root[data-theme="pro"] .btn-secondary:hover { background:#3a5565; }
+  :root[data-theme="pro"] .sidebar { background:#0b1a24; border-right-color:#1a2c38; }
+  :root[data-theme="pro"] .nav-btn.active { background:#213743; color:#fff; box-shadow:inset 3px 0 0 #00e701; border-radius:6px; }
+  :root[data-theme="pro"] .nav-btn.active svg { color:#00e701; }
+  :root[data-theme="pro"] .nav-btn:hover { background:#1a2c38; }
+  :root[data-theme="pro"] .panel, :root[data-theme="pro"] .card { border-radius:12px; box-shadow:0 2px 0 rgba(0,0,0,.25); }
+  :root[data-theme="pro"] input, :root[data-theme="pro"] select, :root[data-theme="pro"] textarea { background:#0f212e; border-color:#2f4553; }
+  :root[data-theme="pro"] input:focus, :root[data-theme="pro"] select:focus { outline:none; border-color:#00e701; box-shadow:0 0 0 2px rgba(0,231,1,.18); }
+  :root[data-theme="pro"] .auth-brand {
+    background:
+      radial-gradient(ellipse 90% 70% at 15% 0%, rgba(0,231,1,.16), transparent 60%),
+      radial-gradient(ellipse 70% 60% at 100% 100%, rgba(47,69,83,.6), transparent 60%),
+      #0b1a24;
+    border-right-color:#1a2c38;
+  }
+  :root[data-theme="pro"] .auth-brand::after { background:none; animation:none; }
+  :root[data-theme="pro"] .brand-hero h1 { text-shadow:none; }
+  :root[data-theme="pro"] .brand-hero h1 span { color:#00e701; text-shadow:0 0 28px rgba(0,231,1,.35); }
+  :root[data-theme="pro"] .auth-form-side { background:#0f212e; }
+  :root[data-theme="pro"] .auth-card { background:#1a2c38; padding:30px 28px; border-radius:16px; border:1px solid #2f4553; box-shadow:0 20px 50px rgba(0,0,0,.35); }
+  :root[data-theme="pro"] .auth-tab.active { color:#00e701; border-color:#00e701; }
+  :root[data-theme="pro"] th { background:#213743; }
+
+
+  /* ============ INTRO SPLASH (plays when the site opens) ============ */
+  #intro-splash{position:fixed;inset:0;z-index:100000;background:radial-gradient(ellipse 80% 60% at 50% 40%, #12303a 0%, #0b1a24 60%, #070f16 100%);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;color:#fff;overflow:hidden;
+    transition:opacity .6s ease, visibility .6s ease;cursor:pointer;}
+  #intro-splash.out{opacity:0;visibility:hidden;}
+  #intro-splash .sp-logo{width:84px;height:84px;border-radius:50%;opacity:0;transform:scale(.6);animation:spLogo .8s .1s cubic-bezier(.2,.9,.3,1.2) forwards;box-shadow:0 0 40px rgba(0,231,1,.35);}
+  #intro-splash .sp-title{margin-top:26px;text-align:center;font-family:var(--disp,'Space Grotesk',sans-serif);font-weight:700;line-height:1;letter-spacing:.04em;}
+  #intro-splash .sp-line1{font-size:clamp(44px,12vw,92px);color:#f1f5f9;}
+  #intro-splash .sp-line2{font-size:clamp(34px,9.4vw,72px);color:#00e701;text-shadow:0 0 30px rgba(0,231,1,.45);margin-top:4px;}
+  #intro-splash .sp-title span{display:inline-block;opacity:0;transform:translateY(28px) scale(.9);filter:blur(8px);animation:spLetter .55s cubic-bezier(.2,.8,.2,1) forwards;}
+  #intro-splash .sp-words{margin-top:30px;min-height:48px;width:min(92vw,520px);text-align:center;font-family:var(--body,'IBM Plex Sans',sans-serif);font-size:clamp(16px,4.6vw,22px);letter-spacing:.06em;color:#c5d3de;font-style:italic;}
+  #intro-splash .sp-words b{display:block;opacity:0;font-weight:500;transform:translateY(10px);filter:blur(6px);animation:spTag .8s ease forwards;}
+  #intro-splash .sp-words b+b{color:#00e701;margin-top:4px;}
+  #intro-splash .sp-bar{position:absolute;left:50%;bottom:11%;width:min(70vw,260px);height:3px;margin-left:calc(min(70vw,260px) / -2);background:#1a2c38;border-radius:3px;overflow:hidden;}
+  #intro-splash .sp-bar i{display:block;height:100%;width:0;background:#00e701;box-shadow:0 0 12px rgba(0,231,1,.7);animation:spBar 3.4s .2s cubic-bezier(.4,0,.2,1) forwards;}
+  #intro-splash .sp-skip{position:absolute;bottom:4%;font-family:var(--mono,monospace);font-size:11px;letter-spacing:.18em;color:#6f8798;}
+  @keyframes spLogo{to{opacity:1;transform:scale(1);}}
+  @keyframes spLetter{to{opacity:1;transform:none;filter:none;}}
+  @keyframes spTag{to{opacity:1;transform:none;filter:none;}}
+  @keyframes spWord{0%{opacity:0;transform:translateY(8px);}25%{opacity:1;transform:none;}75%{opacity:1;transform:none;}100%{opacity:0;transform:translateY(-8px);}}
+  @keyframes spBar{to{width:100%;}}
+  @media (prefers-reduced-motion: reduce){#intro-splash *{animation-duration:.01s !important;animation-delay:0s !important;}}
+
+
+  .vm-motto-d{margin-top:18px;max-width:440px;color:var(--text-muted);font-size:17px;font-style:italic;line-height:1.5;}
+  .brand-hero .vm-block p{margin-top:0;max-width:none;}
+  .brand-hero .vm-motto-d{margin-top:16px;}
+  .vm-grid{margin-top:22px;display:grid;gap:18px;max-width:470px;}
+  .vm-block b{display:block;font-family:var(--mono);font-size:11.5px;letter-spacing:.24em;color:var(--cyan);margin-bottom:6px;font-weight:600;}
+  .vm-block p{margin:0;color:var(--text-muted);font-size:14px;line-height:1.6;}
+  .vm-mobile{display:none;width:100%;max-width:400px;margin:22px auto 0;}
+  .vm-mobile .vm-motto{text-align:center;color:var(--cyan);font-style:italic;font-size:15px;margin-bottom:16px;}
+  .vm-mobile .vm-block{margin-bottom:14px;padding:12px 14px;border:1px solid var(--line);border-radius:10px;background:var(--panel);}
+  @media (max-width:880px){.vm-mobile{display:block;} .auth-form-side{flex-direction:column;justify-content:center;padding:28px 20px;overflow:auto;}}
+  @media (max-height:760px){.brand-hero h1{font-size:clamp(40px,5.2vw,62px);} .vm-grid{gap:12px;margin-top:16px;} .vm-block p{font-size:13px;line-height:1.5;} .auth-brand{padding:36px 50px;}}
 
   *{box-sizing:border-box;margin:0;padding:0;}
   html,body{height:100%;}
@@ -976,6 +1062,32 @@
   </div>
 </div>
 
+<!-- ===================== INTRO SPLASH ===================== -->
+<div id="intro-splash" onclick="endIntro()">
+  <img class="sp-logo" id="sp-logo" alt="">
+  <div class="sp-title">
+    <div class="sp-line1" id="sp-l1"></div>
+    <div class="sp-line2" id="sp-l2"></div>
+  </div>
+  <div class="sp-words" id="sp-words"></div>
+  <div class="sp-bar"><i></i></div>
+  <div class="sp-skip">TAP TO SKIP</div>
+</div>
+<script>
+(function(){
+  var sp=document.getElementById('intro-splash'); if(!sp) return;
+  function build(id,text,start){var el=document.getElementById(id),d=start;text.split('').forEach(function(c){var s=document.createElement('span');s.textContent=c===' '?'\u00a0':c;s.style.animationDelay=d+'s';d+=.07;el.appendChild(s);});return d;}
+  var end=build('sp-l1','K-RAY',.5); build('sp-l2','ENTERPRISE',end+.05);
+  var words=['Creating opportunities,','building futures'],w=document.getElementById('sp-words');
+  words.forEach(function(t,i){var b=document.createElement('b');b.textContent=t;b.style.animationDelay=(1.9+i*.8)+'s';w.appendChild(b);});
+  var me=document.getElementById('sp-logo'); me.style.display='none';
+  document.addEventListener('DOMContentLoaded',function(){var logo=document.querySelector('.auth-brand img');if(logo&&logo.src){me.src=logo.src;me.style.display='';}});
+  var done=false;
+  window.endIntro=function(){if(done)return;done=true;sp.classList.add('out');setTimeout(function(){if(sp.parentNode)sp.parentNode.removeChild(sp);},700);};
+  setTimeout(window.endIntro,4600);
+})();
+</script>
+
 <!-- ===================== AUTH SCREEN ===================== -->
 <div id="auth-screen" class="hidden">
   <div class="auth-brand">
@@ -983,11 +1095,10 @@
     <div class="brand-mark"><span class="dot"></span> ENTERPRISE FINANCIAL PLATFORM</div>
     <div class="brand-hero">
       <h1>K-RAY<br><span>ENTERPRISE</span></h1>
-      <p>See straight through the numbers. Purchases, sales, inventory and capital — captured on one plate, read at a glance.</p>
-      <div class="brand-scanline">
-        <span><b>09</b> live modules</span>
-        <span><b>&lt;1s</b> recalculation</span>
-        <span><b>001</b> ledger, no guesswork</span>
+      <p class="vm-motto-d">“Creating opportunities, building futures.”</p>
+      <div class="vm-grid">
+        <div class="vm-block"><b>VISION</b><p>To build a trusted and growing brand that creates opportunities for young people and expands across communities through quality, affordable and locally made products.</p></div>
+        <div class="vm-block"><b>MISSION</b><p>To create quality and affordable products through local skills, creativity and the reuse of available materials, while providing young people with opportunities.</p></div>
       </div>
     </div>
     <div class="auth-footer">K-RAY ENTERPRISE &copy; 2026 — INTERNAL ACCESS ONLY</div>
@@ -1150,6 +1261,11 @@
         </form>
       </div>
     </div>
+    <div class="vm-mobile">
+      <div class="vm-motto">“Creating opportunities, building futures.”</div>
+      <div class="vm-block"><b>VISION</b><p>To build a trusted and growing brand that creates opportunities for young people and expands across communities through quality, affordable and locally made products.</p></div>
+      <div class="vm-block"><b>MISSION</b><p>To create quality and affordable products through local skills, creativity and the reuse of available materials, while providing young people with opportunities.</p></div>
+    </div>
   </div>
 </div>
 
@@ -1242,6 +1358,7 @@
       </div>
       <div class="topbar-right">
         <select class="theme-select" id="theme-selector" onchange="changeTheme(this.value)">
+          <option value="pro">Pro Dark (green)</option>
           <option value="auto">Auto System Theme</option>
           <option value="dark">Dark Theme</option>
           <option value="light">Light Theme</option>
@@ -3263,7 +3380,7 @@
       document.getElementById('login-email').value = rememberedEmail;
       document.getElementById('remember-me').checked = true;
     }
-    const savedTheme = localStorage.getItem('kray_theme') || 'auto';
+    const savedTheme = localStorage.getItem('kray_theme') || 'pro';
     document.getElementById('theme-selector').value = savedTheme;
     changeTheme(savedTheme);
 
