@@ -1480,6 +1480,11 @@
           <div class="delta">Singular M-Pesa Liquidity</div>
         </div>
         <div class="panel stat-card">
+          <div class="label">Pumice Cash Received (hand)</div>
+          <div class="value amber" id="pm-cash-hand">KSh 0</div>
+          <div class="delta">Cash sales, not in M-Pesa</div>
+        </div>
+        <div class="panel stat-card">
           <div class="label">Total Withdrawn to People</div>
           <div class="value red" id="pm-total-withdrawn">KSh 0</div>
           <div class="delta" id="pm-withdrawn-sub">0 withdrawals</div>
@@ -1492,14 +1497,33 @@
           <div class="card-head">
             <div><h3>Log Pumice Sale</h3><div class="sub">Singular revenue stored directly in M-Pesa</div></div>
           </div>
-          <form class="inline-form" onsubmit="addPumiceSale(event)">
+          <form class="inline-form" onsubmit="addPumiceSaleToDraft(event)">
             <div class="field"><label>Customer</label><input type="text" id="pm-s-customer" placeholder="Buyer name" required></div>
             <div class="field"><label>Pumice Type</label><select id="pm-s-type" onchange="onPumiceTypeChange(this)" required style="background:var(--panel-alt);border:1px solid var(--line);color:var(--text);padding:11px 13px;border-radius:8px;"></select></div>
             <div class="field small"><label>Date</label><input type="date" id="pm-s-date" required></div>
+            <div class="field small"><label>Paid via</label><select id="pm-s-account" onchange="document.getElementById('pm-s-cashpart-box').classList.toggle('hidden', this.value !== 'split')" style="background:var(--panel-alt);border:1px solid var(--line);color:var(--text);padding:11px 13px;border-radius:8px;"><option value="mpesa">M-Pesa</option><option value="cash">Cash</option><option value="split">Split (M-Pesa + Cash)</option></select></div>
+            <div class="field small hidden" id="pm-s-cashpart-box"><label>Cash part (KSh)</label><input type="number" id="pm-s-cashpart" min="0" step="0.01" placeholder="rest is M-Pesa"></div>
             <div class="field small"><label>Qty (units/bags)</label><input type="number" id="pm-s-qty" min="0.01" step="0.01" value="1" required></div>
             <div class="field small"><label>Price each</label><input type="number" id="pm-s-price" min="0" step="0.01" required></div>
-            <button type="submit" class="btn btn-primary" style="height:41px; margin-top: auto;">+ Add Pumice Sale</button>
+            <button type="submit" class="btn btn-primary" style="height:41px; margin-top: auto;">+ Add to Draft</button>
           </form>
+          <div class="receipt-box" style="margin-top:14px;">
+            <div class="receipt-box-head">
+              <h4>Pumice Sales Draft</h4>
+              <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                <button class="btn btn-secondary btn-small" onclick="clearPumiceDraft()">Clear draft</button>
+                <button class="btn btn-primary btn-small" id="pm-draft-submit" onclick="submitPumiceDraft()">Submit Draft to Sales</button>
+              </div>
+            </div>
+            <div class="sub" style="margin:0 0 8px;">Nothing is recorded until you submit. The draft is kept on this device if you close the page.</div>
+            <div class="table-container">
+              <table>
+                <thead><tr><th>Customer</th><th>Type</th><th>Date</th><th>Paid via</th><th class="num">Qty</th><th class="num">Price each</th><th class="num">Total</th><th></th></tr></thead>
+                <tbody id="pm-draft-body"><tr class="empty-row"><td colspan="8">No items in the draft yet.</td></tr></tbody>
+                <tfoot><tr><td colspan="6">Draft Total</td><td class="num" id="pm-draft-total">KSh 0</td><td></td></tr></tfoot>
+              </table>
+            </div>
+          </div>
         </div>
 
         <div class="card">
@@ -1580,6 +1604,10 @@
             <select id="pm-s-filter-type" onchange="renderPumice()"><option value="">All types</option></select>
           </div>
           <div class="field small">
+            <label>Paid via</label>
+            <select id="pm-s-filter-acct" onchange="renderPumice()"><option value="">M-Pesa &amp; Cash</option><option value="mpesa">M-Pesa only</option><option value="cash">Cash only</option></select>
+          </div>
+          <div class="field small">
             <label>From Date</label>
             <input type="date" id="pm-s-filter-from" onchange="renderPumice()">
           </div>
@@ -1592,8 +1620,8 @@
         <div id="pm-s-summary" class="muted" style="padding:8px 4px;font-weight:600;"></div>
         <div class="table-container">
           <table>
-            <thead><tr><th>Date</th><th>Customer</th><th>Type</th><th class="num">Qty</th><th class="num">Price each</th><th class="num">Amount (KSh)</th><th style="text-align:center;">Action</th></tr></thead>
-            <tbody id="pm-sales-ledger-body"><tr class="empty-row"><td colspan="7">No Pumice sales logged yet.</td></tr></tbody>
+            <thead><tr><th>Date</th><th>Customer</th><th>Type</th><th>Paid via</th><th class="num">Qty</th><th class="num">Price each</th><th class="num">Amount (KSh)</th><th style="text-align:center;">Action</th></tr></thead>
+            <tbody id="pm-sales-ledger-body"><tr class="empty-row"><td colspan="8">No Pumice sales logged yet.</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -2731,6 +2759,7 @@
     comments: [], // Comments list: { id, author, text, date }
     stagedPurchaseItems: [],
     stagedSalesItems: [],
+    pumiceDraft: [],
     purchasesPage: 1,
     purchasesPageSize: 30,
     salesPage: 1,
@@ -3797,6 +3826,7 @@
     }
 
     loadDraftSalesItems();
+    loadPumiceDraft();
 
     ['p-date','s-date','cr-date','c-date','tr-date','e-date','pm-s-date','pm-p-date','pm-e-date','pm-w-date','bt-search-date','hist-date'].forEach(id=>{
       const el = document.getElementById(id);
@@ -4451,7 +4481,7 @@
     if (isServerMode()) {
       try {
         const created = await apiRequest('/api/pumice', { method: 'POST', body: JSON.stringify(body) });
-        state.pumice.unshift({ id: created.id, date: created.date, type: created.type, desc: created.desc, qty: created.qty, amount: created.amount, item: created.item || '' });
+        state.pumice.unshift({ id: created.id, date: created.date, type: created.type, desc: created.desc, qty: created.qty, amount: created.amount, item: created.item || '', account: created.account || body.account || 'mpesa', cash_part: created.cash_part != null ? created.cash_part : (body.cash_part || 0) });
       } catch (err) { alert('Could not save to server: ' + (err.message || 'unknown error')); return false; }
     } else {
       state.pumice.unshift({ id: nextId(), ...body });
@@ -4461,7 +4491,46 @@
     return true;
   }
 
-  async function addPumiceSale(e){
+  function pmCashPart(p){
+    const amt = Number(p.amount) || 0;
+    if (p.account === 'cash') return amt;
+    if (p.account === 'split') return Math.min(amt, Math.max(0, Number(p.cash_part) || 0));
+    return 0;
+  }
+  function pmMpesaPart(p){ return Math.round(((Number(p.amount) || 0) - pmCashPart(p)) * 100) / 100; }
+  function pmAcctLabel(a){ return a === 'cash' ? 'Cash' : a === 'split' ? 'Split' : 'M-Pesa'; }
+  function pmPayLabel(p){
+    if (p.account === 'split') return `M-Pesa ${fmt(pmMpesaPart(p))} + Cash ${fmt(pmCashPart(p))}`;
+    return pmAcctLabel(p.account);
+  }
+  const PM_DRAFT_KEY = 'kray_draft_pumice_sales';
+  function savePumiceDraft(){ try { localStorage.setItem(PM_DRAFT_KEY, JSON.stringify(state.pumiceDraft)); } catch(e){} }
+  function loadPumiceDraft(){
+    try { const raw = localStorage.getItem(PM_DRAFT_KEY); state.pumiceDraft = raw ? JSON.parse(raw) : []; }
+    catch(e){ state.pumiceDraft = []; }
+    if (!Array.isArray(state.pumiceDraft)) state.pumiceDraft = [];
+    renderPumiceDraft();
+  }
+
+  function renderPumiceDraft(){
+    const body = document.getElementById('pm-draft-body'); if (!body) return;
+    const tot = state.pumiceDraft.reduce((a, d) => a + d.qty * d.price, 0);
+    body.innerHTML = state.pumiceDraft.length === 0
+      ? '<tr class="empty-row"><td colspan="8">No items in the draft yet.</td></tr>'
+      : state.pumiceDraft.map((d, i) => `<tr>
+          <td>${reEsc(d.customer || '—')}</td>
+          <td>${reEsc(d.item)}</td>
+          <td>${reEsc(d.date)}</td>
+          <td>${pmPayLabel({ account: d.account, cash_part: d.cash_part, amount: d.qty * d.price })}</td>
+          <td class="num mono">${d.qty}</td>
+          <td class="num mono">${fmt(d.price)}</td>
+          <td class="num mono">${fmt(Math.round(d.qty * d.price * 100) / 100)}</td>
+          <td style="text-align:center;"><button class="row-del" onclick="removePumiceDraftItem(${i})">✕</button></td>
+        </tr>`).join('');
+    const te = document.getElementById('pm-draft-total'); if (te) te.textContent = fmt(Math.round(tot * 100) / 100);
+  }
+
+  function addPumiceSaleToDraft(e){
     e.preventDefault();
     const customer = document.getElementById('pm-s-customer').value.trim();
     const item = document.getElementById('pm-s-type').value;
@@ -4469,11 +4538,52 @@
     const date = document.getElementById('pm-s-date').value || todayStr();
     const qty = Number(document.getElementById('pm-s-qty').value) || 1;
     const price = Number(document.getElementById('pm-s-price').value) || 0;
-    const ok = await savePumiceRecord({ date, type: 'sale', desc: customer, qty, amount: Math.round(qty * price * 100) / 100, item });
-    if (!ok) return;
-    document.getElementById('pm-s-customer').value = '';
+    const account = document.getElementById('pm-s-account').value || 'mpesa';
+    let cash_part = 0;
+    const total = Math.round(qty * price * 100) / 100;
+    if (account === 'split') {
+      cash_part = Number(document.getElementById('pm-s-cashpart').value) || 0;
+      if (!(cash_part > 0) || !(cash_part < total)) { alert('For a split payment, enter the cash part: more than 0 and less than the total (' + fmt(total) + '). The rest is M-Pesa.'); return; }
+    }
+    state.pumiceDraft.push({ customer, item, date, qty, price, account, cash_part });
+    savePumiceDraft(); renderPumiceDraft();
+    // keep customer and date so the next type for the same buyer is quick
     document.getElementById('pm-s-qty').value = '1';
     document.getElementById('pm-s-price').value = '';
+    document.getElementById('pm-s-cashpart').value = '';
+  }
+
+  function removePumiceDraftItem(i){ state.pumiceDraft.splice(i, 1); savePumiceDraft(); renderPumiceDraft(); }
+
+  function clearPumiceDraft(){
+    if (!state.pumiceDraft.length) return;
+    if (!confirm('Clear all items in the Pumice sales draft?')) return;
+    state.pumiceDraft = []; savePumiceDraft(); renderPumiceDraft();
+  }
+
+  let pmSubmitting = false;
+  async function submitPumiceDraft(){
+    if (pmSubmitting) return;
+    if (!state.pumiceDraft.length) { alert('Add at least one item to the draft first.'); return; }
+    pmSubmitting = true;
+    const btn = document.getElementById('pm-draft-submit'); if (btn) btn.disabled = true;
+    try {
+      let done = 0;
+      while (state.pumiceDraft.length) {
+        const d = state.pumiceDraft[0];
+        const ok = await savePumiceRecord({ date: d.date, type: 'sale', desc: d.customer, qty: d.qty, amount: Math.round(d.qty * d.price * 100) / 100, item: d.item, account: d.account || 'mpesa', cash_part: d.account === 'split' ? d.cash_part : 0 });
+        if (!ok) { alert(done + ' item(s) were submitted. The rest stay in the draft so nothing is lost; try again.'); break; }
+        state.pumiceDraft.shift(); done++;
+        savePumiceDraft();
+      }
+      renderPumiceDraft();
+      if (!state.pumiceDraft.length) {
+        document.getElementById('pm-s-customer').value = '';
+        alert('Pumice sales submitted: ' + done + ' item(s).');
+      }
+    } finally {
+      pmSubmitting = false; if (btn) btn.disabled = false;
+    }
   }
 
   async function addPumicePurchase(e){
@@ -4551,6 +4661,7 @@
     document.getElementById('pm-s-filter-from').value = '';
     document.getElementById('pm-s-filter-to').value = '';
     const _t=document.getElementById('pm-s-filter-type'); if(_t) _t.value='';
+    const _a=document.getElementById('pm-s-filter-acct'); if(_a) _a.value='';
     renderPumice();
   }
 
@@ -4573,8 +4684,8 @@
   function exportPumiceSalesCSV(){
     exportToCSV(
       `pumice-sales-${todayStr()}.csv`,
-      ['Date', 'Customer', 'Type', 'Qty', 'Price each', 'Amount'],
-      state.pumice.filter(p => p.type === 'sale').map(p => [p.date, p.desc, p.item || '', p.qty || 1, Math.round((p.amount / (p.qty || 1)) * 100) / 100, p.amount])
+      ['Date', 'Customer', 'Type', 'Paid via', 'M-Pesa part', 'Cash part', 'Qty', 'Price each', 'Amount'],
+      state.pumice.filter(p => p.type === 'sale').map(p => [p.date, p.desc, p.item || '', pmAcctLabel(p.account), pmMpesaPart(p), pmCashPart(p), p.qty || 1, Math.round((p.amount / (p.qty || 1)) * 100) / 100, p.amount])
     );
   }
 
@@ -4626,6 +4737,26 @@
           <td style="text-align:center;"><button class="row-edit" onclick="editPumice(${p.id})" title="Edit">✏</button><button class="row-del" onclick="deletePumice(${p.id})">✕</button></td>
         </tr>
       `).join('');
+  }
+
+  function togglePumiceGroup(key){
+    if (expandedReceipts.has(key)) expandedReceipts.delete(key); else expandedReceipts.add(key);
+    renderPumice();
+  }
+
+  async function deletePumiceGroup(key){
+    const rows = state.pumice.filter(p => p.type === 'sale' && ('pm|' + (p.date || '') + '|' + String(p.desc || '').trim().toLowerCase()) === key);
+    if (!rows.length) return;
+    if (!confirm('Delete this whole receipt (' + rows.length + ' items)?')) return;
+    for (const r of rows) {
+      if (isServerMode()) {
+        try { await apiRequest('/api/pumice/' + r.id, { method: 'DELETE' }); }
+        catch (err) { alert('Could not delete on server: ' + (err.message || 'unknown error')); break; }
+      }
+      state.pumice = state.pumice.filter(p => p.id !== r.id);
+    }
+    saveStateToStorage();
+    renderAll();
   }
 
   async function deletePumice(id){
@@ -4682,7 +4813,7 @@
     let mpesaVault = 0;
     state.pumice.forEach(p => {
       if (isPumiceWriteOff(p)) return;
-      if(p.type === 'sale') mpesaVault += p.amount;
+      if (p.type === 'sale') { mpesaVault += pmMpesaPart(p); }
       else mpesaVault -= p.amount;
     });
 
@@ -4704,6 +4835,7 @@
     document.getElementById('pm-net-profit').textContent = fmt(netProfit);
     document.getElementById('pm-margin-perc').textContent = `Margin ${margin}`;
     document.getElementById('pm-mpesa-cash').textContent = fmt(mpesaVault);
+    document.getElementById('pm-cash-hand').textContent = fmt(state.pumice.filter(p => p.type === 'sale').reduce((a, p) => a + pmCashPart(p), 0));
 
     const allWithdrawals = state.pumice.filter(p => p.type === 'withdrawal');
     const totWithdrawn = allWithdrawals.reduce((s, x) => s + Number(x.amount), 0);
@@ -4730,7 +4862,8 @@
       });
     }
 
-    const allSales = applyPumiceFilters(state.pumice.filter(p => p.type === 'sale'), 'pm-s-search-query', 'pm-s-filter-from', 'pm-s-filter-to', 'pm-s-filter-type');
+    const acctF = document.getElementById('pm-s-filter-acct')?.value || '';
+    const allSales = applyPumiceFilters(state.pumice.filter(p => p.type === 'sale' && (!acctF || (acctF === 'cash' ? pmCashPart(p) > 0 : pmMpesaPart(p) > 0))), 'pm-s-search-query', 'pm-s-filter-from', 'pm-s-filter-to', 'pm-s-filter-type');
     const allPurchases = applyPumiceFilters(state.pumice.filter(p => p.type === 'purchase'), 'pm-p-search-query', 'pm-p-filter-from', 'pm-p-filter-to', 'pm-p-filter-type');
     const allExpenses = applyPumiceFilters(state.pumice.filter(p => p.type === 'expense'), 'pm-e-search-query', 'pm-e-filter-from', 'pm-e-filter-to', 'pm-e-filter-type');
 
@@ -4747,22 +4880,62 @@
       el.textContent = rows.length ? `${rows.length} record${rows.length!==1?'s':''} · ${word}: ${q} units · ${fmt(amt)}` + (q ? ` · avg ${fmt(Math.round(amt/q*100)/100)} each` : '') : '';
     }
     pmSummary('pm-s-summary', allSales, 'Sold');
+    { const el = document.getElementById('pm-s-summary');
+      if (el) {
+        const m = allSales.reduce((x, p) => x + pmMpesaPart(p), 0);
+        const c = allSales.reduce((x, p) => x + pmCashPart(p), 0);
+        const q = allSales.reduce((x, p) => x + (Number(p.qty) || 1), 0);
+        const shown = acctF === 'cash' ? c : acctF === 'mpesa' ? m : m + c;
+        el.textContent = allSales.length
+          ? `${allSales.length} record${allSales.length !== 1 ? 's' : ''} · Sold: ${q} units · ${acctF ? (acctF === 'cash' ? 'Cash received: ' : 'M-Pesa received: ') : 'Total: '}${fmt(shown)}` + (acctF ? '' : ` · M-Pesa ${fmt(m)} · Cash ${fmt(c)}`)
+          : '';
+      } }
     pmSummary('pm-p-summary', allPurchases, 'Bought');
     pmSummary('pm-e-summary', allExpenses, 'Total');
 
-    salesBody.innerHTML = allSales.length === 0
-      ? '<tr class="empty-row"><td colspan="7">No Pumice sales match your filters.</td></tr>'
-      : allSales.map(p => `
-        <tr>
-          <td>${p.date}</td>
-          <td>${p.desc}</td>
+    // group sales: same customer + same date = one receipt (click to see the items)
+    const pmGroups = [];
+    { const gm = new Map();
+      allSales.forEach(p => {
+        const key = 'pm|' + (p.date || '') + '|' + String(p.desc || '').trim().toLowerCase();
+        let g = gm.get(key);
+        if (!g) { g = { key, rows: [] }; gm.set(key, g); pmGroups.push(g); }
+        g.rows.push(p);
+      });
+    }
+    const pmRow = (p, indent) => `
+        <tr${indent ? ' style="background:rgba(127,127,127,.07);"' : ''}>
+          <td>${indent ? '' : p.date}</td>
+          <td${indent ? ' style="padding-left:28px;"' : ''}>${indent ? '' : reEsc(p.desc || '')}</td>
           <td>${p.item ? reEsc(p.item) : '<span class="muted">—</span>'}</td>
+          <td>${pmPayLabel(p)}</td>
           <td class="num mono">${p.qty || 1}</td>
           <td class="num mono">${fmt(Math.round((p.amount / (p.qty || 1)) * 100) / 100)}</td>
           <td class="num mono green">+${fmt(p.amount)}</td>
           <td style="text-align:center;"><button class="row-edit" onclick="editPumice(${p.id})" title="Edit">✏</button><button class="row-del" onclick="deletePumice(${p.id})">✕</button></td>
-        </tr>
-      `).join('');
+        </tr>`;
+    salesBody.innerHTML = pmGroups.length === 0
+      ? '<tr class="empty-row"><td colspan="8">No Pumice sales match your filters.</td></tr>'
+      : pmGroups.map(g => {
+          if (g.rows.length === 1) return pmRow(g.rows[0], false);
+          const open = expandedReceipts.has(g.key);
+          const total = g.rows.reduce((x, r) => x + (Number(r.amount) || 0), 0);
+          const qty = g.rows.reduce((x, r) => x + (Number(r.qty) || 1), 0);
+          const types = [...new Set(g.rows.map(r => r.item).filter(Boolean))];
+          const first = g.rows[0];
+          const head = `
+        <tr class="receipt-group-row" style="cursor:pointer;" onclick="togglePumiceGroup(${JSON.stringify(g.key).replace(/"/g, '&quot;')})">
+          <td>${first.date}</td>
+          <td><strong>${open ? '▾' : '▸'} ${reEsc(first.desc || 'Walk-in')}</strong> <span class="muted">· ${g.rows.length} items</span></td>
+          <td>${types.length ? reEsc(types.join(', ')) : '<span class="muted">—</span>'}</td>
+          <td>${(() => { const m = g.rows.reduce((x, r) => x + pmMpesaPart(r), 0), c = g.rows.reduce((x, r) => x + pmCashPart(r), 0); return c === 0 ? 'M-Pesa' : m === 0 ? 'Cash' : `M-Pesa ${fmt(m)} + Cash ${fmt(c)}`; })()}</td>
+          <td class="num mono">${qty}</td>
+          <td class="num mono">—</td>
+          <td class="num mono green">+${fmt(total)}</td>
+          <td style="text-align:center;" onclick="event.stopPropagation()"><button class="row-del" onclick="deletePumiceGroup(${JSON.stringify(g.key).replace(/"/g, '&quot;')})" title="Delete whole receipt">✕</button></td>
+        </tr>`;
+          return open ? head + g.rows.map(r => pmRow(r, true)).join('') : head;
+        }).join('');
 
     purchasesBody.innerHTML = allPurchases.length === 0
       ? '<tr class="empty-row"><td colspan="7">No Pumice purchases match your filters.</td></tr>'
@@ -5907,6 +6080,8 @@
       <h3 style="margin-top:0;">Edit Pumice ${reEsc(r.type)}</h3>
       <div class="field"><label>Date</label><input type="date" id="pe-date" value="${reEsc(r.date || '')}"></div>
       <div class="field"><label>${labels[r.type] || 'Description'}</label><input type="text" id="pe-desc" value="${reEsc(r.desc || '')}"></div>
+      ${r.type === 'sale' ? `<div class="field"><label>Paid via</label><select id="pe-account"><option value="mpesa"${(r.account || 'mpesa') === 'mpesa' ? ' selected' : ''}>M-Pesa</option><option value="cash"${r.account === 'cash' ? ' selected' : ''}>Cash</option><option value="split"${r.account === 'split' ? ' selected' : ''}>Split (M-Pesa + Cash)</option></select></div>
+      <div class="field" id="pe-cashpart-box"${r.account === 'split' ? '' : ' style="display:none;"'}><label>Cash part (KSh) — rest is M-Pesa</label><input type="number" id="pe-cashpart" min="0" step="0.01" value="${r.account === 'split' ? (Number(r.cash_part) || 0) : ''}"></div>` : ''}
       ${hasQty ? `<div class="field"><label>Pumice type</label><select id="pe-item">${typeOpts}</select></div>
       <div class="field"><label>Quantity</label><input type="number" id="pe-qty" min="1" step="1" value="${qty}"></div>
       <div class="field"><label>Price each (KSh)</label><input type="number" id="pe-unit" min="0" step="0.01" value="${unit}"></div>
@@ -5920,11 +6095,13 @@
     const $ = i => document.getElementById(i);
     const upd = () => { if (hasQty) $('pe-total').textContent = 'Total: ' + fmt(Math.round((parseFloat($('pe-qty').value)||0) * (parseFloat($('pe-unit').value)||0) * 100) / 100); };
     if (hasQty) { $('pe-qty').oninput = upd; $('pe-unit').oninput = upd; upd(); }
+    if ($('pe-account')) $('pe-account').onchange = () => { $('pe-cashpart-box').style.display = $('pe-account').value === 'split' ? '' : 'none'; };
     $('pe-cancel').onclick = () => ov.remove();
     $('pe-save').onclick = async () => {
       const date = $('pe-date').value;
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { alert('Please choose a valid date.'); return; }
       const body = { date, type: r.type, desc: $('pe-desc').value.trim(), qty: r.qty, amount: r.amount, item: r.item };
+      if (r.type === 'sale' && $('pe-account')) { body.account = $('pe-account').value; body.cash_part = 0; }
       if (hasQty) {
         const q = parseFloat($('pe-qty').value), u = parseFloat($('pe-unit').value);
         if (!(q > 0) || !(u >= 0)) { alert('Enter a valid quantity and price.'); return; }
@@ -5933,6 +6110,11 @@
         const a = parseFloat($('pe-amount').value);
         if (!(a >= 0)) { alert('Enter a valid amount.'); return; }
         body.amount = a;
+      }
+      if (body.account === 'split') {
+        const cp = parseFloat($('pe-cashpart').value) || 0;
+        if (!(cp > 0) || !(cp < body.amount)) { alert('For a split payment, the cash part must be more than 0 and less than the total (' + fmt(body.amount) + ').'); return; }
+        body.cash_part = cp;
       }
       if (!body.desc && r.type !== 'expense') { alert('Please fill in the name/description.'); return; }
       try {
@@ -7480,7 +7662,7 @@
     // Pumice M-Pesa Vault addition
     state.pumice.forEach(p => {
       if (isPumiceWriteOff(p)) return;
-      if(p.type === 'sale') accounts.mpesa += p.amount;
+      if (p.type === 'sale') { accounts.cash += pmCashPart(p); accounts.mpesa += pmMpesaPart(p); }
       else accounts.mpesa -= p.amount;
     });
 
