@@ -10,9 +10,9 @@ Env vars (all optional):
   KRAY_DAILY_SUMMARY   "off" to disable (default on)
   KRAY_SUMMARY_HOUR    hour 0-23, Nairobi time (default 20)
   KRAY_SUMMARY_TO      comma-separated recipients (default: all verified users)
-  KRAY_FINAL_HOUR      hour 0-23, Nairobi time (default 11): the morning "last call" for yesterday
+  KRAY_FINAL_TIME      HH:MM Nairobi time (default 19:58): the "last call" for yesterday, just before tonight's summary
 
-Late entries: at KRAY_FINAL_HOUR the next morning, yesterday's numbers are rebuilt. If they differ from
+Late entries: at KRAY_FINAL_TIME the next evening (just before that evening's summary), yesterday's numbers are rebuilt. If they differ from
 what the evening email showed (sales added late, a back-dated entry, an edit), a corrected
 "UPDATED" summary for yesterday is emailed. If nothing changed, nothing is sent.
 """
@@ -32,7 +32,20 @@ bp = Blueprint("summary", __name__, url_prefix="/api")
 EAT = datetime.timedelta(hours=3)
 ENABLED = os.environ.get("KRAY_DAILY_SUMMARY", "on").strip().lower() != "off"
 SUMMARY_HOUR = int(os.environ.get("KRAY_SUMMARY_HOUR", "20") or 20)
-FINAL_HOUR = int(os.environ.get("KRAY_FINAL_HOUR", "11") or 11)
+def _parse_time(v, default):
+    try:
+        h, m = v.strip().split(":")
+        return int(h) * 60 + int(m)
+    except Exception:
+        return default
+
+
+FINAL_MINUTES = _parse_time(os.environ.get("KRAY_FINAL_TIME", "19:58"), 19 * 60 + 58)   # minutes after midnight
+FINAL_LABEL = "{:02d}:{:02d}".format(FINAL_MINUTES // 60, FINAL_MINUTES % 60)
+
+
+def _now_minutes(now):
+    return now.hour * 60 + now.minute
 OVERRIDE_TO = [e.strip() for e in os.environ.get("KRAY_SUMMARY_TO", "").split(",") if e.strip()]
 
 ACCOUNTS = {"pochi": "Pochi La Biashara", "mpesa": "M-Pesa", "cash": "Cash", "moneybox": "Moneybox"}
@@ -209,7 +222,7 @@ def render(s, updated=False):
     lines.append(f"Loans still owed by customers: {kes(s['loans_owed'])} ({s['loans_people']} customer(s))")
     if not updated:
         lines.append("")
-        lines.append(f"Missing something? You can still record today's sales (choose today's date) until {FINAL_HOUR}:00 tomorrow morning; a corrected summary is emailed then.")
+        lines.append(f"Missing something? You can still record today's sales (choose today's date) until {FINAL_LABEL} tomorrow evening; a corrected summary for today is emailed then, just before tomorrow's summary.")
     text = "\n".join(lines)
 
     # ---- HTML version ----
@@ -272,7 +285,7 @@ def render(s, updated=False):
         h.append(f'<h3 style="margin:20px 0 6px;">Pumice</h3><div style="font-size:14px;">Sales {escape(kes(p["sale"]))} · Purchases {escape(kes(p["purchase"]))} · Expenses {escape(kes(p["expense"]))} · Withdrawn {escape(kes(p["withdrawal"]))}</div>')
     h.append(f'<p style="margin-top:20px;padding:10px;background:#f3f4f6;border-radius:8px;font-size:14px;">Loans still owed by customers: <b>{escape(kes(s["loans_owed"]))}</b> ({s["loans_people"]} customer(s))</p>')
     if not updated:
-        h.append(f'<p style="font-size:13px;color:#666;">Missing something? You can still record today\'s sales (choose today\'s date) until {FINAL_HOUR}:00 tomorrow morning; a corrected summary is emailed then.</p>')
+        h.append(f'<p style="font-size:13px;color:#666;">Missing something? You can still record today\'s sales (choose today\'s date) until {FINAL_LABEL} tomorrow evening; a corrected summary for today is emailed then, just before tomorrow\'s summary.</p>')
     h.append('</div>')
     return subject, text, "".join(h)
 
@@ -305,6 +318,7 @@ def maybe_send_daily_summary():
     day = now.strftime("%Y-%m-%d")
     if now.hour < SUMMARY_HOUR or _sent_day == day:
         return
+    maybe_send_final_summary()                   # yesterday's corrected summary always goes out first
     if time.time() - _last_attempt < 1800:       # retry at most every 30 min after a failure
         return
     if not _lock.acquire(blocking=False):
@@ -346,7 +360,7 @@ def maybe_send_final_summary():
         return
     now = nairobi_now()
     today = now.strftime("%Y-%m-%d")
-    if now.hour < FINAL_HOUR or now.hour >= SUMMARY_HOUR or _final_day == today:
+    if _now_minutes(now) < FINAL_MINUTES or _final_day == today:
         return
     if not _lock.acquire(blocking=False):
         return
@@ -378,7 +392,7 @@ def maybe_send_final_summary():
 def trigger_in_background():
     """Non-blocking hook for the health route."""
     now = nairobi_now()
-    if ENABLED and not mailer.DEMO_MODE and FINAL_HOUR <= now.hour < SUMMARY_HOUR and _final_day != now.strftime("%Y-%m-%d"):
+    if ENABLED and not mailer.DEMO_MODE and _now_minutes(now) >= FINAL_MINUTES and _final_day != now.strftime("%Y-%m-%d"):
         threading.Thread(target=maybe_send_final_summary, daemon=True).start()
     if not ENABLED or mailer.DEMO_MODE or now.hour < SUMMARY_HOUR or _sent_day == now.strftime("%Y-%m-%d"):
         return
