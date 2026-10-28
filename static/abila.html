@@ -8224,9 +8224,9 @@
     const hasAny = (state.sales||[]).some(r => (r.date||'').startsWith(y))
       || (state.creditSales||[]).some(r => (r.date||'').startsWith(y))
       || (state.pumice||[]).some(r => r.type === 'sale' && (r.date||'').startsWith(y));
-    if (nb.getUTCHours() >= 11 || hasAny) { el.style.display = 'none'; return; }
+    if (nb.getUTCHours() * 60 + nb.getUTCMinutes() >= 19 * 60 + 58 || hasAny) { el.style.display = 'none'; return; }
     el.style.display = 'block';
-    el.innerHTML = `⚠ <b>No sales were recorded for yesterday (${y}).</b> If you traded, add them now and choose <b>${y}</b> as the date. A corrected summary is emailed at 11:00 this morning.`;
+    el.innerHTML = `⚠ <b>No sales were recorded for yesterday (${y}).</b> If you traded, add them now and choose <b>${y}</b> as the date. You have until 7:58 pm today; a corrected summary for yesterday is emailed then, just before today's summary.`;
   }
 
   function renderAll(){
