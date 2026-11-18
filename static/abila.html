@@ -2100,6 +2100,8 @@
           <button class="btn btn-secondary btn-small" onclick="resetPurchasesFilters()" style="height:41px;">Reset Filters</button>
         </div>
 
+        <div id="purchases-banner"></div>
+
         <div class="table-container">
           <table>
             <thead><tr><th>Date</th><th>Item</th><th>Supplier</th><th>Account</th><th class="num">Qty</th><th class="num">Unit Cost</th><th class="num">Total</th><th style="text-align:center;">Action</th></tr></thead>
@@ -2223,6 +2225,7 @@
           <button class="btn btn-secondary btn-small" onclick="resetSalesFilters()" style="height:41px;">Reset Filters</button>
         </div>
         <div class="sub" id="sales-live-summary" style="margin:-8px 0 14px;"></div>
+        <div id="sales-banner"></div>
 
         <div class="table-container">
           <table>
@@ -2438,7 +2441,9 @@
             </select>
           </div>
           <div class="field"><label id="e-name-label">Expense Name</label><input type="text" id="e-name" placeholder="e.g. Electricity bill" required></div>
-          <div class="field small" id="e-amount-box"><label>Amount (KSh)</label><input type="number" id="e-amount" min="0" step="0.01"></div>
+          <div class="field small" id="e-pqty-box"><label>Qty (optional)</label><input type="number" id="e-pqty" min="0" step="any" placeholder="e.g. 50" oninput="expCalc()"></div>
+          <div class="field small" id="e-punit-box"><label>Price each (optional)</label><input type="number" id="e-punit" min="0" step="any" placeholder="e.g. 20" oninput="expCalc()"></div>
+          <div class="field small" id="e-amount-box"><label>Total Amount (KSh)</label><input type="number" id="e-amount" min="0" step="0.01" oninput="expSplitSync()"></div>
           <div class="field hidden" id="e-item-box"><label>Product</label><input type="text" id="e-item" list="s-item-datalist" placeholder="Pick or type the product" oninput="onExpenseItemChange()"></div>
           <div class="field small hidden" id="e-qty-box"><label>Qty lost</label><input type="number" id="e-qty" min="0.01" step="0.01" value="1"></div>
           <div class="field small hidden" id="e-unit-box"><label>Cost each (KSh)</label><input type="number" id="e-unit" min="0" step="0.01"></div>
@@ -2454,12 +2459,22 @@
             </select>
           </div>
           <div class="field" id="e-account-box"><label>Paid From</label>
-            <select id="e-account" style="background:var(--panel-alt);border:1px solid var(--line);color:var(--text);padding:11px 13px;border-radius:8px;">
+            <select id="e-account" onchange="expAccChange()" style="background:var(--panel-alt);border:1px solid var(--line);color:var(--text);padding:11px 13px;border-radius:8px;">
               <option value="cash" selected>Cash</option>
               <option value="mpesa">M-Pesa</option>
               <option value="pochi">Pochi La Biashara</option>
               <option value="moneybox">Moneybox</option>
+              <option value="split">Split (several accounts)</option>
             </select>
+          </div>
+          <div class="field" id="e-split-box" style="display:none;width:100%;"></div>
+          <div class="field" id="e-receipt-box"><label>Receipt Photo (optional)</label>
+            <input type="file" id="e-receipt" accept="image/*" capture="environment" onchange="expReceiptPicked(this)" style="display:none">
+            <div style="display:flex;gap:8px;align-items:center;">
+              <button type="button" class="btn btn-secondary btn-small" style="height:41px;" onclick="document.getElementById('e-receipt').click()">📷 Take / Choose Photo</button>
+              <img id="e-receipt-thumb" alt="" style="display:none;height:41px;border-radius:6px;border:1px solid var(--line);">
+              <button type="button" id="e-receipt-clear" class="row-del" style="display:none;" onclick="expReceiptClear()" title="Remove photo">✕</button>
+            </div>
           </div>
           <button type="submit" class="btn btn-primary">+ Log Expense</button>
         </form>
@@ -3919,7 +3934,7 @@
         qty: c.qty, price: c.price, total: c.total, paid: c.paid, remaining: c.remaining,
         payments: (c.payments || []).map(p => ({ id: p.id, date: p.date, amount: p.amount, account: p.account }))
       }));
-      state.expenses = expenses.map(e => ({ id: e.id, name: e.name, amount: e.amount, date: e.date, category: e.category, account: e.account, item: e.item || '', qty: e.qty || 0 }));
+      state.expenses = expenses.map(e => ({ id: e.id, name: e.name, amount: e.amount, date: e.date, category: e.category, account: e.account, item: e.item || '', qty: e.qty || 0, has_receipt_img: !!e.has_receipt_img }));
       state.cash = cash.map(c => ({ id: c.id, source: c.source, account: c.account, amount: c.amount, date: c.date, note: c.note }));
       state.transfers = transfers.map(t => ({ id: t.id, date: t.date, from: t.from_account, to: t.to_account, note: t.note, amount: t.amount }));
       state.pumice = pumice.map(p => ({ id: p.id, date: p.date, type: p.type, desc: p.desc, qty: p.qty, amount: p.amount, item: p.item || '' }));
@@ -4304,53 +4319,138 @@
     }
   }
 
-  async function recordCustomerRepayment(customerName) {
+  // ---------------------------------------------------------------
+  // SPLIT-PAYMENT LINES MODAL (expense edit + credit-loan repayment)
+  // ---------------------------------------------------------------
+  let spl = null;
+  function splClose(){ const o = document.getElementById('spl-overlay'); if (o) o.remove(); spl = null; }
+  function splTotal(){ return spl.lines.reduce((x, l) => x + (Number(l.amount) || 0), 0); }
+  function splUpdate(){
+    const el = document.getElementById('spl-total'); if (!el || !spl) return;
+    el.textContent = fmt(splTotal());
+    const n = document.getElementById('spl-note');
+    if (n && spl.balance != null) {
+      const left = spl.balance - splTotal();
+      n.textContent = left >= -0.01 ? 'Balance left after this payment: ' + fmt(Math.max(0, left)) : 'More than the balance of ' + fmt(spl.balance) + '!';
+      n.style.color = left < -0.01 ? 'var(--red, #e5534b)' : '';
+    }
+  }
+  function splRender(){
+    const e = spl; if (!e) return;
+    const st = 'width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2,transparent);color:inherit;font:inherit;';
+    const accOpts = a => ['pochi','mpesa','cash','moneybox'].map(k => `<option value="${k}" ${a === k ? 'selected' : ''}>${accountLabels[k]}</option>`).join('');
+    document.getElementById('spl-title').textContent = e.title;
+    document.getElementById('spl-body').innerHTML = `
+      ${e.headHtml}
+      <div class="sub" style="margin-bottom:6px;">${e.linesLabel}</div>
+      ${e.lines.map((l, i) => `
+        <div style="margin-bottom:10px;padding:10px;border:1px solid var(--line);border-radius:10px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:end;">
+            <div><div class="sub" style="margin-bottom:2px;">Amount (KSh)</div><input type="number" step="any" min="0" style="${st}" value="${l.amount}" oninput="spl.lines[${i}].amount=this.value;splUpdate()"></div>
+            <div><div class="sub" style="margin-bottom:2px;">${e.accLabel}</div><select style="${st}" onchange="spl.lines[${i}].account=this.value">${accOpts(l.account)}</select></div>
+          </div>
+          ${e.lines.length > 1 ? `<div style="text-align:right;margin-top:6px;"><button class="row-del" onclick="spl.lines.splice(${i},1);splRender()" title="Remove line">✕</button></div>` : ''}
+        </div>`).join('')}
+      <button class="btn btn-secondary" style="width:100%;margin-bottom:12px;" onclick="spl.lines.push({amount:'',account:'${e.lines[e.lines.length-1].account}'});splRender()">+ Add line (split payment)</button>
+      <div style="display:flex;justify-content:space-between;font-weight:700;"><span>Total</span><span class="mono" id="spl-total">${fmt(splTotal())}</span></div>
+      ${e.balance != null ? '<div class="sub" id="spl-note" style="margin-top:8px;"></div>' : ''}`;
+    splUpdate();
+  }
+  function splOpen(cfg){
+    splClose();
+    spl = cfg;
+    const o = document.createElement('div');
+    o.id = 'spl-overlay'; o.className = 'receipt-modal-overlay';
+    o.onclick = ev => { if (ev.target === o) splClose(); };
+    o.innerHTML = `<div class="receipt-modal" style="max-width:520px;">
+      <div class="receipt-modal-head"><h3 id="spl-title"></h3><button class="receipt-modal-close" onclick="splClose()">✕</button></div>
+      <div class="receipt-modal-body" id="spl-body" style="padding:16px;"></div>
+      <div class="receipt-modal-actions"><button class="btn btn-secondary" onclick="splClose()">Cancel</button>
+      <button class="btn btn-primary" id="spl-save" onclick="spl.onSave()">Save Changes</button></div></div>`;
+    document.body.appendChild(o);
+    splRender();
+  }
+  const splInputStyle = 'width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2,transparent);color:inherit;font:inherit;';
+
+  // ---- Credit loan repayment (replaces the old prompts) ----
+  function recordCustomerRepayment(customerName) {
     const items = state.creditSales.filter(c => c.customer === customerName && c.remaining > 0);
-    items.sort((a, b) => new Date(a.date) - new Date(b.date)); // oldest debt first
+    items.sort((a, b) => new Date(a.date) - new Date(b.date));
     const totalRemaining = items.reduce((s, c) => s + Number(c.remaining), 0);
-
-    if (totalRemaining <= 0) {
-      alert(`${customerName} has no outstanding balance.`);
-      return;
-    }
-
-    const pmtAmountStr = prompt(`Enter repayment amount for ${customerName} (Total Remaining Balance: ${fmt(totalRemaining)}):`, totalRemaining);
-    if (pmtAmountStr === null) return;
-    const pmtAmount = Number(pmtAmountStr);
-    if (isNaN(pmtAmount) || pmtAmount <= 0) {
-      alert('Invalid payment amount entered.');
-      return;
-    }
-    if (pmtAmount > totalRemaining + 0.01) {
-      alert(`Payment amount exceeds total remaining balance of ${fmt(totalRemaining)}.`);
-      return;
-    }
-
-    const account = prompt('Select Receiving Account for Cash:\nType 1 for Pochi\nType 2 for M-Pesa\nType 3 for Cash\nType 4 for Moneybox', '3');
-    let targetAcc = 'cash';
-    if (account === '1') targetAcc = 'pochi';
-    else if (account === '2') targetAcc = 'mpesa';
-    else if (account === '3') targetAcc = 'cash';
-    else if (account === '4') targetAcc = 'moneybox';
-
-    const pmtDate = prompt('Enter payment date (YYYY-MM-DD):', todayStr()) || todayStr();
-
-    // Spread this one payment across the customer's overall balance —
-    // oldest unpaid item first — rather than asking which item it's for.
-    let remainingToApply = pmtAmount;
-    try {
-      for (const cs of items) {
-        if (remainingToApply <= 0) break;
-        const applyAmount = Math.min(remainingToApply, cs.remaining);
-        await applyPaymentToCreditSale(cs, applyAmount, targetAcc, pmtDate);
-        remainingToApply -= applyAmount;
+    if (totalRemaining <= 0) { alert(`${customerName} has no outstanding balance.`); return; }
+    splOpen({
+      title: 'Record Repayment', balance: totalRemaining, date: todayStr(),
+      linesLabel: 'Payment lines — add another line to split across accounts', accLabel: 'Received in',
+      headHtml: `<div style="margin-bottom:12px;"><div style="font-weight:700;">${reEsc(customerName)}</div><div class="sub">Total remaining balance: ${fmt(totalRemaining)}</div></div>
+        <div style="margin-bottom:14px;"><div class="sub" style="margin-bottom:4px;">Payment date</div><input type="date" style="${splInputStyle}" value="${todayStr()}" oninput="spl.date=this.value"></div>`,
+      lines: [{ amount: totalRemaining, account: 'cash' }],
+      onSave: async () => {
+        const lines = spl.lines.filter(l => Number(l.amount) > 0);
+        const tot = lines.reduce((x, l) => x + Number(l.amount), 0);
+        if (!lines.length) { alert('Enter a payment amount.'); return; }
+        if (tot > totalRemaining + 0.01) { alert(`Payment exceeds total remaining balance of ${fmt(totalRemaining)}.`); return; }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(spl.date || '')) { alert('Please choose a valid date.'); return; }
+        const date = spl.date, btn = document.getElementById('spl-save'); btn.disabled = true;
+        try {
+          for (const l of lines) {
+            let left = Number(l.amount);
+            for (const cs of items) {
+              if (left <= 0.0001) break;
+              const room = Number(cs.remaining);
+              if (room <= 0) continue;
+              const apply = Math.min(left, room);
+              await applyPaymentToCreditSale(cs, apply, l.account, date);
+              left -= apply;
+            }
+          }
+        } catch (err) { alert('Could not save payment to server: ' + (err.message || 'unknown error')); }
+        splClose(); saveStateToStorage(); renderAll();
       }
-    } catch (err) {
-      alert('Could not save payment to server: ' + (err.message || 'unknown error'));
-    }
+    });
+  }
 
-    saveStateToStorage();
-    renderAll();
+  // ---- Expense edit with payment lines ----
+  function editExpense(id){
+    const r = state.expenses.find(x => x.id === id); if (!r) return;
+    if (r.account === 'writeoff' || (r.item && Number(r.qty) > 0)) {   // damaged-goods record: keep the simple editor
+      quickEditRecord('expenses', state.expenses, id, [
+        { key: 'name', label: 'Expense Name' }, { key: 'category', label: 'Category' },
+        { key: 'amount', label: 'Amount', numeric: true }, { key: 'date', label: 'Date (YYYY-MM-DD)' } ]);
+      return;
+    }
+    const cats = [...new Set(['Rent','Transport','Utilities','Salaries','Supplies','Maintenance','General', r.category].filter(Boolean))];
+    splOpen({
+      title: 'Edit Expense', balance: null, name: r.name, category: r.category || 'General', date: r.date,
+      linesLabel: 'Paid from — add another line to split the payment', accLabel: 'Paid from',
+      headHtml: `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px;">
+        <div><div class="sub" style="margin-bottom:4px;">Expense name</div><input style="${splInputStyle}" value="${reEsc(r.name)}" oninput="spl.name=this.value"></div>
+        <div><div class="sub" style="margin-bottom:4px;">Date</div><input type="date" style="${splInputStyle}" value="${reEsc(r.date)}" oninput="spl.date=this.value"></div>
+        <div style="grid-column:1/-1;"><div class="sub" style="margin-bottom:4px;">Quantity (optional, e.g. number of sacks)</div><input type="number" step="any" min="0" style="${splInputStyle}" value="${Number(r.qty) > 0 ? r.qty : ''}" oninput="spl.qty=this.value"></div>
+        <div style="grid-column:1/-1;"><div class="sub" style="margin-bottom:4px;">Category</div><input style="${splInputStyle}" list="spl-cats" value="${reEsc(r.category || 'General')}" oninput="spl.category=this.value"><datalist id="spl-cats">${cats.map(c => `<option value="${reEsc(c)}">`).join('')}</datalist></div></div>`,
+      lines: [{ amount: r.amount, account: r.account || 'cash' }],
+      qty: Number(r.qty) > 0 ? r.qty : '',
+      onSave: async () => {
+        const lines = spl.lines.filter(l => Number(l.amount) > 0);
+        if (!String(spl.name).trim()) { alert('Enter the expense name.'); return; }
+        if (!lines.length) { alert('Enter an amount.'); return; }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(spl.date || '')) { alert('Please choose a valid date.'); return; }
+        const btn = document.getElementById('spl-save'); btn.disabled = true;
+        const base = { name: String(spl.name).trim(), category: spl.category || 'General', date: spl.date };
+        try {
+          const first = Object.assign({}, base, { amount: Number(lines[0].amount), account: lines[0].account, qty: Number(spl.qty) > 0 ? Number(spl.qty) : 0 });
+          if (isServerMode()) await apiRequest('/api/expenses/' + r.id, { method: 'PUT', body: JSON.stringify(first) });
+          Object.assign(r, first);
+          for (const l of lines.slice(1)) {
+            const body = Object.assign({}, base, { amount: Number(l.amount), account: l.account, item: '', qty: 0 });
+            if (isServerMode()) {
+              const c = await apiRequest('/api/expenses', { method: 'POST', body: JSON.stringify(body) });
+              state.expenses.unshift({ id: c.id, name: c.name, amount: c.amount, date: c.date, category: c.category, account: c.account, item: '', qty: 0 });
+            } else state.expenses.unshift(Object.assign({ id: nextId() }, body));
+          }
+        } catch (err) { alert('Could not save: ' + (err.message || 'unknown error') + '\nRefresh to see the current state.'); }
+        splClose(); saveStateToStorage(); renderAll();
+      }
+    });
   }
 
   async function markCustomerAsFullyPaid(customerName) {
@@ -4991,24 +5091,35 @@
       sel.innerHTML = '<option value="">All types</option>' + names.map(n => `<option value="${reEsc(n)}">${reEsc(n)}</option>`).join('');
       sel.value = names.includes(cur) ? cur : '';
     });
-    function pmSummary(id, rows, word){
-      const el = document.getElementById(id); if (!el) return;
-      const q = rows.reduce((a,p)=>a+(Number(p.qty)||1),0), amt = rows.reduce((a,p)=>a+(Number(p.amount)||0),0);
-      el.textContent = rows.length ? `${rows.length} record${rows.length!==1?'s':''} · ${word}: ${q} units · ${fmt(amt)}` + (q ? ` · avg ${fmt(Math.round(amt/q*100)/100)} each` : '') : '';
+    // Big "total for this search" banner above each ledger
+    function pmBanner(k, rows, label, mainAmt, extraHtml){
+      const el = document.getElementById('pm-' + k + '-summary'); if (!el) return;
+      const val = id => document.getElementById('pm-' + k + '-' + id)?.value || '';
+      const from = val('filter-from'), to = val('filter-to'), ty = val('filter-type'), q = val('search-query').trim();
+      const dmy = d => d.split('-').reverse().join('/');
+      const parts = [];
+      parts.push(from && to ? `${dmy(from)} – ${dmy(to)}` : from ? `from ${dmy(from)}` : to ? `up to ${dmy(to)}` : 'All dates');
+      if (ty) parts.push(reEsc(ty));
+      if (q) parts.push('“' + reEsc(q) + '”');
+      const units = rows.reduce((a, p) => a + (Number(p.qty) || 1), 0);
+      const amtAll = rows.reduce((a, p) => a + (Number(p.amount) || 0), 0);
+      const avg = units ? Math.round(amtAll / units * 100) / 100 : 0;
+      el.className = '';
+      el.style.cssText = 'margin:12px 0;padding:14px 16px;border-radius:12px;background:var(--panel-alt);border-left:5px solid var(--green);';
+      el.innerHTML = rows.length
+        ? `<div style="font-size:12px;letter-spacing:.08em;color:var(--text-muted);text-transform:uppercase;">${label} · ${parts.join(' · ')}</div>
+           <div style="font-size:30px;font-weight:800;color:var(--green);margin:4px 0;font-family:var(--mono);">${fmt(mainAmt)}</div>
+           <div style="font-size:13px;color:var(--text-muted);">${rows.length} record${rows.length !== 1 ? 's' : ''} · ${units} units · avg ${fmt(avg)} each${extraHtml || ''}</div>`
+        : `<div style="font-size:12px;letter-spacing:.08em;color:var(--text-muted);text-transform:uppercase;">${label} · ${parts.join(' · ')}</div>
+           <div style="font-size:18px;font-weight:700;color:var(--text-muted);margin-top:4px;">No records match.</div>`;
     }
-    pmSummary('pm-s-summary', allSales, 'Sold');
-    { const el = document.getElementById('pm-s-summary');
-      if (el) {
-        const m = allSales.reduce((x, p) => x + pmMpesaPart(p), 0);
-        const c = allSales.reduce((x, p) => x + pmCashPart(p), 0);
-        const q = allSales.reduce((x, p) => x + (Number(p.qty) || 1), 0);
-        const shown = acctF === 'cash' ? c : acctF === 'mpesa' ? m : m + c;
-        el.textContent = allSales.length
-          ? `${allSales.length} record${allSales.length !== 1 ? 's' : ''} · Sold: ${q} units · ${acctF ? (acctF === 'cash' ? 'Cash received: ' : 'M-Pesa received: ') : 'Total: '}${fmt(shown)}` + (acctF ? '' : ` · M-Pesa ${fmt(m)} · Cash ${fmt(c)}`)
-          : '';
-      } }
-    pmSummary('pm-p-summary', allPurchases, 'Bought');
-    pmSummary('pm-e-summary', allExpenses, 'Total');
+    { const m = allSales.reduce((x, p) => x + pmMpesaPart(p), 0);
+      const c = allSales.reduce((x, p) => x + pmCashPart(p), 0);
+      const shown = acctF === 'cash' ? c : acctF === 'mpesa' ? m : m + c;
+      pmBanner('s', allSales, acctF === 'cash' ? 'Cash sales total' : acctF === 'mpesa' ? 'M-Pesa sales total' : 'Total sales', shown,
+        acctF ? '' : ` · M-Pesa ${fmt(m)} · Cash ${fmt(c)}`); }
+    pmBanner('p', allPurchases, 'Total purchases', allPurchases.reduce((a, p) => a + (Number(p.amount) || 0), 0));
+    pmBanner('e', allExpenses, 'Total expenses', allExpenses.reduce((a, p) => a + (Number(p.amount) || 0), 0));
 
     // group sales: same customer + same date = one receipt (click to see the items)
     const pmGroups = [];
@@ -5362,43 +5473,46 @@
 
   function getInventoryData() {
     const items = {};
+    const canonMap = {};
+    state.products.forEach(p => { canonMap[String(p.name).trim().toLowerCase()] = p.name; });
+    const canon = n => canonMap[String(n == null ? '' : n).trim().toLowerCase()] || n;
     state.products.forEach(p => {
       items[p.name] = { purchased: 0, sold: 0, totalCost: 0, countCost: 0, category: p.category || 'General' };
     });
 
     state.purchases.forEach(p => {
-      if(!items[p.item]) items[p.item] = { purchased: 0, sold: 0, totalCost: 0, countCost: 0, category: p.category || 'General' };
-      items[p.item].purchased += Number(p.qty);
-      items[p.item].totalCost += (Number(p.qty) * Number(p.cost));
-      items[p.item].countCost += Number(p.qty);
+      if(!items[canon(p.item)]) items[canon(p.item)] = { purchased: 0, sold: 0, totalCost: 0, countCost: 0, category: p.category || 'General' };
+      items[canon(p.item)].purchased += Number(p.qty);
+      items[canon(p.item)].totalCost += (Number(p.qty) * Number(p.cost));
+      items[canon(p.item)].countCost += Number(p.qty);
     });
 
     state.sales.forEach(s => {
-      if(!items[s.item]) items[s.item] = { purchased: 0, sold: 0, totalCost: 0, countCost: 0, category: 'General' };
-      items[s.item].sold += Number(s.qty);
+      if(!items[canon(s.item)]) items[canon(s.item)] = { purchased: 0, sold: 0, totalCost: 0, countCost: 0, category: 'General' };
+      items[canon(s.item)].sold += Number(s.qty);
     });
 
     state.creditSales.forEach(cs => {
-      if(!items[cs.item]) items[cs.item] = { purchased: 0, sold: 0, totalCost: 0, countCost: 0, category: 'General' };
-      items[cs.item].sold += Number(cs.qty);
+      if(!items[canon(cs.item)]) items[canon(cs.item)] = { purchased: 0, sold: 0, totalCost: 0, countCost: 0, category: 'General' };
+      items[canon(cs.item)].sold += Number(cs.qty);
     });
 
     state.expenses.forEach(e => {
       if (!e.item || !(Number(e.qty) > 0)) return;
-      if(!items[e.item]) items[e.item] = { purchased: 0, sold: 0, totalCost: 0, countCost: 0, category: 'General' };
-      items[e.item].lost = (items[e.item].lost || 0) + Number(e.qty);
+      if(!items[canon(e.item)]) items[canon(e.item)] = { purchased: 0, sold: 0, totalCost: 0, countCost: 0, category: 'General' };
+      items[canon(e.item)].lost = (items[canon(e.item)].lost || 0) + Number(e.qty);
     });
 
     state.manualStockLogs.forEach(l => {
-      if(!items[l.item]) items[l.item] = { purchased: 0, sold: 0, totalCost: 0, countCost: 0, category: 'General' };
+      if(!items[canon(l.item)]) items[canon(l.item)] = { purchased: 0, sold: 0, totalCost: 0, countCost: 0, category: 'General' };
       if(l.type === 'add') {
-        items[l.item].purchased += Number(l.qty);
+        items[canon(l.item)].purchased += Number(l.qty);
         if(l.cost > 0) {
-          items[l.item].totalCost += (Number(l.qty) * Number(l.cost));
-          items[l.item].countCost += Number(l.qty);
+          items[canon(l.item)].totalCost += (Number(l.qty) * Number(l.cost));
+          items[canon(l.item)].countCost += Number(l.qty);
         }
       } else if(l.type === 'remove') {
-        items[l.item].sold += Number(l.qty);
+        items[canon(l.item)].sold += Number(l.qty);
       }
     });
 
@@ -5409,9 +5523,11 @@
     const items = getInventoryData();
     const body = document.getElementById('inventory-body');
 
-    const keys = Object.keys(items);
+    // Only goods that are in the Product Catalog are shown (typos / deleted products stay hidden).
+    const catalogNames = new Set(state.products.map(p => String(p.name).trim().toLowerCase()));
+    const keys = Object.keys(items).filter(k => catalogNames.has(String(k).trim().toLowerCase()));
     if(keys.length === 0){
-      body.innerHTML = '<tr class="empty-row"><td colspan="7">Log purchases, sales, or manual stock to view inventory.</td></tr>';
+      body.innerHTML = '<tr class="empty-row"><td colspan="7">No products in your catalog have stock yet. Add products in the Product Catalog, then log purchases or sales.</td></tr>';
       document.getElementById('low-stock-banner').classList.add('hidden');
       return;
     }
@@ -6156,15 +6272,6 @@
     ]);
   }
 
-  function editExpense(id){
-    quickEditRecord('expenses', state.expenses, id, [
-      { key: 'name', label: 'Expense Name' },
-      { key: 'category', label: 'Category' },
-      { key: 'amount', label: 'Amount', numeric: true },
-      { key: 'date', label: 'Date (YYYY-MM-DD)' },
-    ]);
-  }
-
   function editCash(id){
     quickEditRecord('cash', state.cash, id, [
       { key: 'source', label: 'Source' },
@@ -6321,6 +6428,7 @@
 
     const totalCost = filtered.reduce((sum, p) => sum + (p.qty * p.cost), 0);
     document.getElementById('purchases-total').textContent = fmt(totalCost);
+    totalsBanner('purchases-banner', 'Total purchases', filtered, r => r.qty * r.cost, q, from, to);
 
     const groups = groupByReceipt(filtered, 'p');
 
@@ -6377,6 +6485,24 @@
   }
 
   // ---- Group records into one row per receipt (customer/supplier) ----
+  // Big "total for this search" banner (Sales / Purchases)
+  function totalsBanner(elId, label, rows, getAmt, q, from, to, byAccount){
+    const el = document.getElementById(elId); if (!el) return;
+    const dmy = d => d.split('-').reverse().join('/');
+    const parts = [from && to ? `${dmy(from)} – ${dmy(to)}` : from ? `from ${dmy(from)}` : to ? `up to ${dmy(to)}` : 'All dates'];
+    if (q) parts.push('“' + reEsc(q) + '”');
+    const total = rows.reduce((a, r) => a + getAmt(r), 0);
+    const units = rows.reduce((a, r) => a + (Number(r.qty) || 0), 0);
+    const head = `<div style="font-size:12px;letter-spacing:.08em;color:var(--text-muted);text-transform:uppercase;">${label} · ${parts.join(' · ')}</div>`;
+    el.style.cssText = 'margin:12px 0;padding:14px 16px;border-radius:12px;background:var(--panel-alt);border-left:5px solid var(--green);';
+    if (!rows.length) { el.innerHTML = head + '<div style="font-size:18px;font-weight:700;color:var(--text-muted);margin-top:4px;">No records match.</div>'; return; }
+    const acc = {};
+    rows.forEach(r => { const k = r.account || 'cash'; acc[k] = (acc[k] || 0) + getAmt(r); });
+    const accTxt = Object.keys(acc).filter(k => acc[k] > 0.004).map(k => `${accountLabels[k] || k} ${fmt(Math.round(acc[k] * 100) / 100)}`).join(' · ');
+    el.innerHTML = head + `<div style="font-size:30px;font-weight:800;color:var(--green);margin:4px 0;font-family:var(--mono);">${fmt(Math.round(total * 100) / 100)}</div>
+      <div style="font-size:13px;color:var(--text-muted);">${rows.length} record${rows.length !== 1 ? 's' : ''} · ${Math.round(units * 100) / 100} units${accTxt ? ' · ' + accTxt : ''}</div>`;
+  }
+
   const expandedReceipts = new Set();
   function receiptKey(prefix, r) {
     if (!r.receiptId) return prefix + 'i' + r.id;
@@ -6896,6 +7022,7 @@
 
     const totalRevenue = filtered.reduce((sum, s) => sum + (s.qty * s.price), 0);
     document.getElementById('sales-total').textContent = fmt(totalRevenue);
+    totalsBanner('sales-banner', 'Total sales', filtered, r => r.qty * r.price, q, from, to);
 
     const liveSummary = document.getElementById('sales-live-summary');
     if (liveSummary) {
@@ -6969,7 +7096,7 @@
   function toggleExpenseKind() {
     const qty = document.getElementById('e-kind').value === 'qty';
     ['e-item-box', 'e-qty-box', 'e-unit-box', 'e-writeoff-note'].forEach(id => document.getElementById(id).classList.toggle('hidden', !qty));
-    ['e-amount-box', 'e-category-box', 'e-account-box'].forEach(id => document.getElementById(id).classList.toggle('hidden', qty));
+    ['e-amount-box', 'e-pqty-box', 'e-punit-box', 'e-category-box', 'e-account-box', 'e-receipt-box', 'e-split-box'].forEach(id => document.getElementById(id).classList.toggle('hidden', qty));
     document.getElementById('e-name-label').textContent = qty ? 'Reason (e.g. broken, expired)' : 'Expense Name';
     document.getElementById('e-name').placeholder = qty ? 'e.g. Broken while offloading' : 'e.g. Electricity bill';
   }
@@ -6977,6 +7104,75 @@
     const v = document.getElementById('e-item').value.trim().toLowerCase();
     const prod = state.products.find(p => p.name.toLowerCase() === v);
     if (prod && prod.cost > 0) document.getElementById('e-unit').value = prod.cost;
+  }
+
+  // ---- Quantity x price helper and split payment lines for new expenses ----
+  let expSplit = [{ amount: '', account: 'cash' }, { amount: '', account: 'mpesa' }];
+  function expCalc(){
+    const q = Number(document.getElementById('e-pqty').value) || 0, u = Number(document.getElementById('e-punit').value) || 0;
+    if (q > 0 && u > 0) { document.getElementById('e-amount').value = Math.round(q * u * 100) / 100; expSplitSync(); }
+  }
+  function expAccChange(){
+    const on = document.getElementById('e-account').value === 'split';
+    document.getElementById('e-split-box').style.display = on ? '' : 'none';
+    document.getElementById('e-amount').readOnly = on && false;
+    if (on) expSplitRender();
+  }
+  function expSplitSync(){
+    const on = document.getElementById('e-account').value === 'split'; if (!on) return;
+    const tot = Number(document.getElementById('e-amount').value) || 0;
+    const sum = expSplit.reduce((x, l) => x + (Number(l.amount) || 0), 0);
+    const n = document.getElementById('e-split-note');
+    if (n) { n.textContent = 'Lines total ' + fmt(sum) + (tot > 0 ? ' of ' + fmt(tot) : ''); n.style.color = (tot > 0 && Math.abs(sum - tot) > 0.01) ? 'var(--red, #e5534b)' : ''; }
+  }
+  function expSplitRender(){
+    const st = 'padding:9px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel-alt);color:var(--text);font:inherit;';
+    const opts = a => ['cash','mpesa','pochi','moneybox'].map(k => `<option value="${k}" ${a === k ? 'selected' : ''}>${accountLabels[k]}</option>`).join('');
+    document.getElementById('e-split-box').innerHTML = '<label>Split payment — amount per account</label>' + expSplit.map((l, i) => `
+      <div style="display:flex;gap:8px;margin-top:6px;align-items:center;">
+        <input type="number" step="any" min="0" placeholder="Amount" style="${st}flex:1;min-width:0;" value="${l.amount}" oninput="expSplit[${i}].amount=this.value;expSplitSync()">
+        <select style="${st}flex:1;min-width:0;" onchange="expSplit[${i}].account=this.value">${opts(l.account)}</select>
+        ${expSplit.length > 2 ? `<button type="button" class="row-del" onclick="expSplit.splice(${i},1);expSplitRender()">✕</button>` : ''}
+      </div>`).join('') + '<button type="button" class="btn btn-secondary btn-small" style="margin-top:8px;" onclick="expSplit.push({amount:\'\',account:\'cash\'});expSplitRender()">+ Add line</button><div class="sub" id="e-split-note" style="margin-top:6px;"></div>';
+    expSplitSync();
+  }
+
+  // ---- Expense receipt photo (optional, compressed in the browser) ----
+  let expReceiptData = '';
+  function expReceiptPicked(inp){
+    const f = inp.files && inp.files[0]; if(!f) return;
+    const rd = new FileReader();
+    rd.onload = () => {
+      const im = new Image();
+      im.onload = () => {
+        const max = 1100, sc = Math.min(1, max / Math.max(im.width, im.height));
+        const c = document.createElement('canvas'); c.width = Math.round(im.width*sc); c.height = Math.round(im.height*sc);
+        c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+        expReceiptData = c.toDataURL('image/jpeg', 0.6);
+        const t = document.getElementById('e-receipt-thumb'); t.src = expReceiptData; t.style.display = '';
+        document.getElementById('e-receipt-clear').style.display = '';
+      };
+      im.onerror = () => alert('Could not read that photo. Try another.');
+      im.src = rd.result;
+    };
+    rd.readAsDataURL(f);
+  }
+  function expReceiptClear(){
+    expReceiptData = ''; const i = document.getElementById('e-receipt'); if(i) i.value = '';
+    document.getElementById('e-receipt-thumb').style.display = 'none'; document.getElementById('e-receipt-clear').style.display = 'none';
+  }
+  async function viewExpenseReceipt(id){
+    const ex = state.expenses.find(x => x.id === id); if(!ex) return;
+    let src = ex.receipt_img || '';
+    if(!src && isServerMode()){
+      try { const r = await apiRequest('/api/expenses/' + id + '/receipt_img'); src = r.receipt_img || ''; } catch(err){ alert('Could not load the receipt: ' + (err.message||'error')); return; }
+    }
+    if(!src){ alert('No receipt photo for this expense.'); return; }
+    const o = document.createElement('div');
+    o.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.88);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:14px;gap:10px;';
+    o.innerHTML = '<div style="color:#fff;font-weight:700;">' + reEsc(ex.name) + ' — ' + reEsc(ex.date) + ' — ' + fmt(ex.amount) + '</div><img src="' + src + '" style="max-width:100%;max-height:78vh;border-radius:10px;background:#fff;"><button class="btn btn-primary">Close</button>';
+    o.onclick = ev => { if(ev.target.tagName !== 'IMG') o.remove(); };
+    document.body.appendChild(o);
   }
 
   async function addExpense(e){
@@ -6997,19 +7193,34 @@
     } else {
       const amt = Number(document.getElementById('e-amount').value) || 0;
       if (!name || amt <= 0) { alert('Enter the expense name and amount.'); return; }
-      payload = { date, name, category: document.getElementById('e-category').value, amount: amt, account: document.getElementById('e-account').value, item: '', qty: 0 };
+      const pq = Number(document.getElementById('e-pqty').value) || 0;
+      payload = { date, name, category: document.getElementById('e-category').value, amount: amt, account: document.getElementById('e-account').value, item: '', qty: pq };
+      if (payload.account === 'split') {
+        const ls = expSplit.filter(l => Number(l.amount) > 0);
+        const sum = ls.reduce((x, l) => x + Number(l.amount), 0);
+        if (ls.length < 2) { alert('For a split payment, enter amounts on at least two lines.'); return; }
+        if (Math.abs(sum - amt) > 0.01) { alert('The split lines add up to ' + fmt(sum) + ' but the total amount is ' + fmt(amt) + '. Make them match.'); return; }
+        payload.splitLines = ls.map(l => ({ amount: Number(l.amount), account: l.account }));
+      }
+      if (expReceiptData) payload.receipt_img = expReceiptData;
     }
 
-    if (isServerMode()) {
-      try {
-        const created = await apiRequest('/api/expenses', { method: 'POST', body: JSON.stringify(payload) });
-        state.expenses.unshift({ id: created.id, name: created.name, amount: created.amount, date: created.date, category: created.category, account: created.account, item: created.item || '', qty: created.qty || 0 });
-      } catch (err) {
-        alert('Could not save to server: ' + (err.message || 'unknown error'));
-        return;
+    const parts = payload.splitLines
+      ? payload.splitLines.map((l, i) => Object.assign({}, payload, { amount: l.amount, account: l.account, qty: i === 0 ? payload.qty : 0, receipt_img: i === 0 ? payload.receipt_img : undefined, splitLines: undefined }))
+      : [payload];
+    try {
+      for (const pt of parts) {
+        if (isServerMode()) {
+          const created = await apiRequest('/api/expenses', { method: 'POST', body: JSON.stringify(pt) });
+          state.expenses.unshift({ id: created.id, name: created.name, amount: created.amount, date: created.date, category: created.category, account: created.account, item: created.item || '', qty: created.qty || 0, has_receipt_img: !!pt.receipt_img });
+        } else {
+          state.expenses.unshift({ id: nextId(), ...pt });
+        }
       }
-    } else {
-      state.expenses.unshift({ id: nextId(), ...payload });
+    } catch (err) {
+      alert('Could not save to server: ' + (err.message || 'unknown error'));
+      saveStateToStorage(); renderAll();
+      return;
     }
 
     saveStateToStorage();
@@ -7020,6 +7231,9 @@
     document.getElementById('e-item').value = '';
     document.getElementById('e-qty').value = '1';
     document.getElementById('e-unit').value = '';
+    document.getElementById('e-pqty').value = ''; document.getElementById('e-punit').value = '';
+    expSplit = [{ amount: '', account: 'cash' }, { amount: '', account: 'mpesa' }]; document.getElementById('e-account').value = 'cash'; expAccChange();
+    expReceiptClear();
   }
 
   async function addExpenseFromProfit(e){
@@ -7115,10 +7329,10 @@
     body.innerHTML = filtered.map(e => `
       <tr>
         <td>${e.date}</td>
-        <td><strong>${e.name}</strong></td>
+        <td><strong>${e.name}</strong>${(e.has_receipt_img || e.receipt_img) ? ' <button class="row-edit" onclick="viewExpenseReceipt(' + e.id + ')" title="View receipt photo">📎</button>' : ''}</td>
         <td>${e.category || 'General'}</td>
         <td>${accountLabels[e.account || 'cash'] || e.account}</td>
-        <td class="num mono">${e.item ? reEsc(e.item) + ' × ' + e.qty : '—'}</td>
+        <td class="num mono">${e.item ? reEsc(e.item) + ' × ' + e.qty : (Number(e.qty) > 0 ? '× ' + e.qty : '—')}</td>
         <td class="num mono red">${fmt(e.amount)}</td>
         <td style="text-align:center;"><button class="row-edit" onclick="editExpense(${e.id})" title="Edit">✏</button><button class="row-del" onclick="deleteExpense(${e.id})">✕</button></td>
       </tr>
