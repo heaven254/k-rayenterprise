@@ -54,7 +54,7 @@ def _build_summary(row_out, fields, skip=("receipt_id", "date")):
 # Generic helpers for the "simple" resources: same shape of
 # list / create / update / delete, differing only in table name + fields.
 # ---------------------------------------------------------------------
-def register_simple_resource(url, table, fields, numeric_fields=(), column_map=None):
+def register_simple_resource(url, table, fields, numeric_fields=(), column_map=None, heavy=None):
     """
     Registers GET/POST/PUT/DELETE for a straightforward shared table.
 
@@ -68,11 +68,18 @@ def register_simple_resource(url, table, fields, numeric_fields=(), column_map=N
     reverse_map = {v: k for k, v in column_map.items()}
     db_columns = [column_map.get(f, f) for f in fields]
 
+    def _lite(d):
+        # Big blobs (receipt photos) are never sent in lists; only a flag.
+        if heavy and d is not None:
+            d["has_" + heavy] = bool(d.get(heavy))
+            d.pop(heavy, None)
+        return d
+
     def list_records():
         with db_cursor() as cur:
             cur.execute(f"SELECT * FROM {table} ORDER BY id DESC")
             rows = cur.fetchall()
-        return jsonify([_row_out(r, reverse_map) for r in rows])
+        return jsonify([_lite(_row_out(r, reverse_map)) for r in rows])
 
     def create_record():
         data = request.get_json(silent=True) or {}
@@ -87,7 +94,7 @@ def register_simple_resource(url, table, fields, numeric_fields=(), column_map=N
                 [g.user_id] + values,
             )
             row = cur.fetchone()
-            row_out = _row_out(row, reverse_map)
+            row_out = _lite(_row_out(row, reverse_map))
             log_activity(cur, g.user_id, g.name, "created", table, row_out["id"],
                          _build_summary(row_out, fields))
         return jsonify(row_out), 201
@@ -115,7 +122,7 @@ def register_simple_resource(url, table, fields, numeric_fields=(), column_map=N
                 values,
             )
             row = cur.fetchone()
-            row_out = _row_out(row, reverse_map)
+            row_out = _lite(_row_out(row, reverse_map))
             log_activity(cur, g.user_id, g.name, "updated", table, record_id,
                          _build_summary(row_out, fields))
         return jsonify(row_out)
@@ -126,7 +133,7 @@ def register_simple_resource(url, table, fields, numeric_fields=(), column_map=N
             existing = cur.fetchone()
             if not existing:
                 return jsonify({"error": "Record not found"}), 404
-            summary = _build_summary(_row_out(existing, reverse_map), fields)
+            summary = _build_summary(_lite(_row_out(existing, reverse_map)), fields)
             cur.execute(f"DELETE FROM {table} WHERE id = %s", (record_id,))
             log_activity(cur, g.user_id, g.name, "deleted", table, record_id, summary)
         return jsonify({"deleted": record_id})
@@ -135,6 +142,17 @@ def register_simple_resource(url, table, fields, numeric_fields=(), column_map=N
     create_record.__name__ = f"create_{table}"
     update_record.__name__ = f"update_{table}"
     delete_record.__name__ = f"delete_{table}"
+
+    if heavy:
+        def get_heavy(record_id):
+            with db_cursor() as cur:
+                cur.execute(f"SELECT {heavy} FROM {table} WHERE id = %s", (record_id,))
+                r = cur.fetchone()
+            if not r:
+                return jsonify({"error": "Record not found"}), 404
+            return jsonify({"id": record_id, heavy: r[heavy] or ""})
+        get_heavy.__name__ = f"get_{table}_{heavy}"
+        bp.get(f"/{url}/<int:record_id>/{heavy}")(login_required(get_heavy))
 
     bp.get(f"/{url}")(login_required(list_records))
     bp.post(f"/{url}")(login_required(create_record))
@@ -156,8 +174,9 @@ register_simple_resource(
 
 register_simple_resource(
     "expenses", "expenses",
-    fields=["date", "name", "category", "amount", "account", "item", "qty"],
+    fields=["date", "name", "category", "amount", "account", "item", "qty", "receipt_img"],
     numeric_fields=("amount", "qty"),
+    heavy="receipt_img",
 )
 
 register_simple_resource(
