@@ -204,6 +204,12 @@ register_simple_resource(
 )
 
 register_simple_resource(
+    "pumice-credit", "pumice_credit",
+    fields=["date", "customer", "item", "qty", "price", "paid"],
+    numeric_fields=("qty", "price", "paid"),
+)
+
+register_simple_resource(
     "pumice-types", "pumice_types",
     fields=["name"],
 )
