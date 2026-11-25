@@ -1517,6 +1517,29 @@
           </div>
         </div>
 
+        <div class="card" style="margin:18px 0;border-left:5px solid var(--green);">
+          <div class="card-head"><div><h3>Cash Till — morning to evening</h3><div class="sub">Start of day + what came in and went out = what you should have now. Then deposit the extra and keep a float for tomorrow.</div></div></div>
+          <div class="table-container">
+            <table>
+              <thead><tr><th>Account</th><th class="num">Morning start</th><th class="num">Net today (+/−)</th><th class="num">Should have now</th></tr></thead>
+              <tbody id="bt-till-body"></tbody>
+            </table>
+          </div>
+          <div id="bt-till-deposit" style="margin-top:14px;padding:14px;border-radius:12px;background:var(--panel-alt);">
+            <div style="font-weight:700;margin-bottom:8px;">Evening deposit</div>
+            <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:end;">
+              <div class="field small"><label>Cash to keep for tomorrow (KSh)</label><input type="number" id="bt-keep" min="0" step="any" oninput="btKeepChanged()"></div>
+              <div class="field small"><label>Deposit now (KSh)</label><input type="number" id="bt-deposit" min="0" step="any" oninput="btTillPreview()"></div>
+              <div class="field small"><label>Deposit to</label>
+                <select id="bt-dep-to" style="background:var(--panel-alt);border:1px solid var(--line);color:var(--text);padding:11px 13px;border-radius:8px;">
+                  <option value="mpesa" selected>M-Pesa</option><option value="pochi">Pochi La Biashara</option><option value="moneybox">Moneybox</option>
+                </select></div>
+              <button type="button" class="btn btn-primary" id="bt-dep-btn" onclick="btRecordDeposit()">Record deposit</button>
+            </div>
+            <div id="bt-till-after" style="margin-top:12px;font-size:15px;"></div>
+          </div>
+        </div>
+
         <div class="two-col">
           <div class="card" style="margin-bottom:0;">
             <div class="card-head"><h3>Daily Performance Summary</h3></div>
@@ -1563,6 +1586,8 @@
 
     <!-- PUMICE DASHBOARD (SINGULAR ACCOUNTING) -->
     <div class="section" id="section-pumice">
+      <div class="card" id="pm-batch-card" style="margin-bottom:16px;border-left:5px solid var(--green);"></div>
+      <div class="card" id="pm-credit-card" style="margin-bottom:16px;"></div>
       <div class="stats-filter-tabs">
         <button class="stats-tab-btn active" id="pm-tab-weekly" onclick="setPumicePeriod('weekly')">Weekly</button>
         <button class="stats-tab-btn" id="pm-tab-monthly" onclick="setPumicePeriod('monthly')">Monthly</button>
@@ -1618,7 +1643,7 @@
             <div class="field"><label>Customer</label><input type="text" id="pm-s-customer" placeholder="Buyer name" required></div>
             <div class="field"><label>Pumice Type</label><select id="pm-s-type" onchange="onPumiceTypeChange(this)" required style="background:var(--panel-alt);border:1px solid var(--line);color:var(--text);padding:11px 13px;border-radius:8px;"></select></div>
             <div class="field small"><label>Date</label><input type="date" id="pm-s-date" required></div>
-            <div class="field small"><label>Paid via</label><select id="pm-s-account" onchange="document.getElementById('pm-s-cashpart-box').classList.toggle('hidden', this.value !== 'split')" style="background:var(--panel-alt);border:1px solid var(--line);color:var(--text);padding:11px 13px;border-radius:8px;"><option value="mpesa">M-Pesa</option><option value="cash">Cash</option><option value="split">Split (M-Pesa + Cash)</option></select></div>
+            <div class="field small"><label>Paid via</label><select id="pm-s-account" onchange="document.getElementById('pm-s-cashpart-box').classList.toggle('hidden', this.value !== 'split')" style="background:var(--panel-alt);border:1px solid var(--line);color:var(--text);padding:11px 13px;border-radius:8px;"><option value="mpesa">M-Pesa</option><option value="cash">Cash</option><option value="split">Split (M-Pesa + Cash)</option><option value="credit">Credit (pay later)</option></select></div>
             <div class="field small hidden" id="pm-s-cashpart-box"><label>Cash part (KSh)</label><input type="number" id="pm-s-cashpart" min="0" step="0.01" placeholder="rest is M-Pesa"></div>
             <div class="field small"><label>Qty (units/bags)</label><input type="number" id="pm-s-qty" min="0.01" step="0.01" value="1" required></div>
             <div class="field small"><label>Price each</label><input type="number" id="pm-s-price" min="0" step="0.01" required></div>
@@ -1651,9 +1676,10 @@
             <div class="field"><label>Vendor / Note</label><input type="text" id="pm-p-desc" placeholder="e.g. Quarry batch / Freight" required></div>
             <div class="field"><label>Pumice Type</label><select id="pm-p-type" onchange="onPumiceTypeChange(this)" required style="background:var(--panel-alt);border:1px solid var(--line);color:var(--text);padding:11px 13px;border-radius:8px;"></select></div>
             <div class="field small"><label>Date</label><input type="date" id="pm-p-date" required></div>
-            <div class="field small"><label>Qty</label><input type="number" id="pm-p-qty" min="0.01" step="0.01" value="1" required></div>
-            <div class="field small"><label>Price each (KSh)</label><input type="number" id="pm-p-price" min="0" step="0.01" required></div>
-            <button type="submit" class="btn btn-secondary" style="height:41px; margin-top: auto;">+ Log Pumice Purchase</button>
+            <div class="field small"><label>Qty</label><input type="number" id="pm-p-qty" min="0.01" step="0.01" value="1" required oninput="ppfSync()"></div>
+            <div class="field small"><label>Price each (KSh)</label><input type="number" id="pm-p-price" min="0" step="0.01" required oninput="ppfSync()"></div>
+<div class="field" id="ppf-box" style="display:none;"><label style="display:flex;gap:8px;align-items:center;text-transform:none;cursor:pointer;"><input type="checkbox" id="ppf-on" checked onchange="mpFeeToggle('ppf')"> Add M-Pesa charge (KSh)</label><input type="number" id="ppf-amt" min="0" step="any" oninput="this.dataset.manual='1'"><div class="sub" id="ppf-hint" style="font-size:11px;">Send Money charge. Set to 0 if you paid by Till/Paybill (free).</div></div>
+          <button type="submit" class="btn btn-secondary" style="height:41px; margin-top: auto;">+ Log Pumice Purchase</button>
           </form>
         </div>
       </div>
@@ -1672,11 +1698,12 @@
             </div>
             <div class="field"><label id="pm-e-desc-label">Description</label><input type="text" id="pm-e-desc" placeholder="e.g. Transport / Labor" required></div>
             <div class="field small"><label>Date</label><input type="date" id="pm-e-date" required></div>
-            <div class="field small" id="pm-e-plain-box"><label>Amount (KSh)</label><input type="number" id="pm-e-amount" min="0" step="0.01"></div>
+            <div class="field small" id="pm-e-plain-box"><label>Amount (KSh)</label><input type="number" id="pm-e-amount" min="0" step="0.01" oninput="pefSync()"></div>
             <div class="field hidden" id="pm-e-type-box"><label>Pumice Type</label><select id="pm-e-type" onchange="onPumiceTypeChange(this)" style="background:var(--panel-alt);border:1px solid var(--line);color:var(--text);padding:11px 13px;border-radius:8px;"></select></div>
             <div class="field small hidden" id="pm-e-qty-box"><label>Qty lost</label><input type="number" id="pm-e-qty" min="0.01" step="0.01" value="1"></div>
             <div class="field small hidden" id="pm-e-unit-box"><label>Cost each (KSh)</label><input type="number" id="pm-e-unit" min="0" step="0.01"></div>
-            <button type="submit" class="btn btn-secondary" style="height:41px; margin-top: auto;">+ Log Pumice Expense</button>
+<div class="field" id="pef-box" style="display:none;"><label style="display:flex;gap:8px;align-items:center;text-transform:none;cursor:pointer;"><input type="checkbox" id="pef-on" checked onchange="mpFeeToggle('pef')"> Add M-Pesa charge (KSh)</label><input type="number" id="pef-amt" min="0" step="any" oninput="this.dataset.manual='1'"><div class="sub" id="pef-hint" style="font-size:11px;">Send Money charge. Set to 0 if you paid by Till/Paybill (free).</div></div>
+          <button type="submit" class="btn btn-secondary" style="height:41px; margin-top: auto;">+ Log Pumice Expense</button>
           </form>
         </div>
 
@@ -2030,7 +2057,7 @@
           <div class="field"><label>Supplier / Seller</label><input type="text" id="p-supplier" placeholder="e.g. Silafrica" required></div>
           <div class="field small"><label>Date</label><input type="date" id="p-date" required onchange="handlePurchaseItemSelect()"></div>
           <div class="field"><label>Paid From Account</label>
-            <select id="p-account" required>
+            <select id="p-account" required onchange="updatePurchaseSplitRemaining()">
               <option value="pochi">Pochi La Biashara</option>
               <option value="mpesa">M-Pesa</option>
               <option value="cash" selected>Cash</option>
@@ -2073,6 +2100,8 @@
               <div class="field small"><label>Moneybox</label><input type="number" id="p-split-moneybox" min="0" step="0.01" value="0" oninput="updatePurchaseSplitRemaining()"></div>
             </div>
             <div class="sub" id="p-split-remaining-label" style="margin-top:4px;">Remaining to allocate: KSh 0 (purchases must be fully paid — no debt allowed)</div>
+          </div>
+          <div style="margin-top:12px;"><div class="field" id="pf-box" style="display:none;"><label style="display:flex;gap:8px;align-items:center;text-transform:none;cursor:pointer;"><input type="checkbox" id="pf-on" checked onchange="mpFeeToggle('pf')"> Add M-Pesa charge (KSh)</label><input type="number" id="pf-amt" min="0" step="any" oninput="this.dataset.manual='1'"><div class="sub" id="pf-hint" style="font-size:11px;">Send Money charge. Set to 0 if you paid by Till/Paybill (free).</div></div>
           </div>
         </div>
 
@@ -2435,7 +2464,7 @@
         </div>
         <form class="inline-form" onsubmit="addExpense(event)">
           <div class="field"><label>Kind of expense</label>
-            <select id="e-kind" onchange="toggleExpenseKind()" style="background:var(--panel-alt);border:1px solid var(--line);color:var(--text);padding:11px 13px;border-radius:8px;">
+            <select id="e-kind" onchange="toggleExpenseKind();efSync()" style="background:var(--panel-alt);border:1px solid var(--line);color:var(--text);padding:11px 13px;border-radius:8px;">
               <option value="plain">Plain expense (rent, salary, power… no quantity)</option>
               <option value="qty">Damaged / lost goods (has quantity)</option>
             </select>
@@ -2476,6 +2505,7 @@
               <button type="button" id="e-receipt-clear" class="row-del" style="display:none;" onclick="expReceiptClear()" title="Remove photo">✕</button>
             </div>
           </div>
+<div class="field" id="ef-box" style="display:none;"><label style="display:flex;gap:8px;align-items:center;text-transform:none;cursor:pointer;"><input type="checkbox" id="ef-on" checked onchange="mpFeeToggle('ef')"> Add M-Pesa charge (KSh)</label><input type="number" id="ef-amt" min="0" step="any" oninput="this.dataset.manual='1'"><div class="sub" id="ef-hint" style="font-size:11px;">Send Money charge. Set to 0 if you paid by Till/Paybill (free).</div></div>
           <button type="submit" class="btn btn-primary">+ Log Expense</button>
         </form>
         <div class="sub hidden" id="e-writeoff-note" style="margin-top:10px;">Damaged or lost goods are recorded as a loss and taken out of stock. No account balance changes, because the money was already spent when you bought them.</div>
@@ -2885,6 +2915,7 @@
     cash: [],
     transfers: [], // Transfers between account stores: { id, date, from, to, note, amount }
     expenses: [],
+    pumiceCredit: [],
     pumice: [], // Isolated Pumice records: { id, date, type ('sale'|'purchase'|'expense'), desc, qty, amount }
     manualStockLogs: [],
     products: [], // Product catalog: { id, name, category, cost, price }
@@ -3175,6 +3206,7 @@
       transfers: state.transfers,
       expenses: state.expenses,
       pumice: state.pumice,
+      pumiceCredit: state.pumiceCredit || [],
       manualStockLogs: state.manualStockLogs,
       products: state.products,
       users: state.users,
@@ -3191,6 +3223,7 @@
     state.transfers = parsed.transfers || [];
     state.expenses = parsed.expenses || [];
     state.pumice = parsed.pumice || [];
+    state.pumiceCredit = parsed.pumiceCredit || [];
     state.manualStockLogs = parsed.manualStockLogs || [];
     state.products = parsed.products || [];
     state.users = parsed.users || [];
@@ -3905,7 +3938,7 @@
 
   async function loadAllDataFromServer() {
     try {
-      const [products, purchases, sales, creditSales, expenses, cash, transfers, pumice, stockLogs, comments, priceHistory, recons, pumiceTypes, contacts] = await Promise.all([
+      const [products, purchases, sales, creditSales, expenses, cash, transfers, pumice, stockLogs, comments, priceHistory, recons, pumiceTypes, contacts, pumiceCredit] = await Promise.all([
         apiRequest('/api/products'),
         apiRequest('/api/purchases'),
         apiRequest('/api/sales'),
@@ -3920,7 +3953,9 @@
         apiRequest('/api/reconciliations').catch(() => []),
         apiRequest('/api/pumice-types').catch(() => []),
         apiRequest('/api/customer-contacts').catch(() => []),
+        apiRequest('/api/pumice-credit').catch(() => []),
       ]);
+      state.pumiceCredit = (pumiceCredit || []).map(c => ({ id: c.id, date: c.date, customer: c.customer, item: c.item || '', qty: c.qty, price: c.price, paid: c.paid || 0 }));
       state.priceHistory = priceHistory || [];
       state.reconciliations = recons || [];
       state.customerContacts = (contacts || []).map(c => ({ id: c.id, name: c.name, phone: c.phone }));
@@ -3937,7 +3972,7 @@
       state.expenses = expenses.map(e => ({ id: e.id, name: e.name, amount: e.amount, date: e.date, category: e.category, account: e.account, item: e.item || '', qty: e.qty || 0, has_receipt_img: !!e.has_receipt_img }));
       state.cash = cash.map(c => ({ id: c.id, source: c.source, account: c.account, amount: c.amount, date: c.date, note: c.note }));
       state.transfers = transfers.map(t => ({ id: t.id, date: t.date, from: t.from_account, to: t.to_account, note: t.note, amount: t.amount }));
-      state.pumice = pumice.map(p => ({ id: p.id, date: p.date, type: p.type, desc: p.desc, qty: p.qty, amount: p.amount, item: p.item || '' }));
+      state.pumice = pumice.map(p => ({ id: p.id, date: p.date, type: p.type, desc: p.desc, qty: p.qty, amount: p.amount, item: p.item || '', account: p.account || 'mpesa', cash_part: p.cash_part || 0 }));
       state.manualStockLogs = stockLogs.map(l => ({ id: l.id, date: l.date, type: l.type, item: l.item, qty: l.qty, cost: l.cost, comment: l.comment }));
       state.comments = comments.map(c => ({ id: c.id, author: c.author, text: c.text, date: c.date }));
     } catch (err) {
@@ -4106,9 +4141,86 @@
     renderBusinessToday();
   }
 
+  // ---- Cash Till (morning start -> evening deposit) ----
+  function balancesAsOf(cut, inclusive){
+    const ok = d => d && (inclusive ? d <= cut : d < cut);
+    const a = { pochi: 0, mpesa: 0, cash: 0, moneybox: 0 };
+    const add = (k, v) => { if (a[k] !== undefined) a[k] += v; else a.cash += v; };
+    state.sales.forEach(x => { if (ok(x.date)) add(x.account, x.qty * x.price); });
+    state.creditSales.forEach(cs => (cs.payments || []).forEach(p => { if (ok(p.date)) add(p.account, Number(p.amount) || 0); }));
+    state.purchases.forEach(x => { if (ok(x.date)) add(x.account, -(x.qty * x.cost)); });
+    state.expenses.forEach(e => { if (ok(e.date) && !isWriteOff(e)) add(e.account, -(Number(e.amount) || 0)); });
+    state.cash.forEach(c => { if (ok(c.date)) add(c.account, Number(c.amount) || 0); });
+    state.transfers.forEach(t => { if (ok(t.date)) { const m = Number(t.amount) || 0; if (a[t.from] !== undefined) a[t.from] -= m; if (a[t.to] !== undefined) a[t.to] += m; } });
+    state.pumice.forEach(p => { if (!ok(p.date) || isPumiceWriteOff(p)) return; if (p.type === 'sale') { a.cash += pmCashPart(p); a.mpesa += pmMpesaPart(p); } else a.mpesa -= p.amount; });
+    return a;
+  }
+  function btKeepKey(){ return 'kray_till_keep'; }
+  function btKeepChanged(){
+    const v = document.getElementById('bt-keep').value;
+    try { localStorage.setItem(btKeepKey(), v); } catch (e) {}
+    const now = btTillNow(); const keep = Number(v) || 0;
+    document.getElementById('bt-deposit').value = Math.max(0, Math.round((now.cash - keep) * 100) / 100) || '';
+    btTillPreview();
+  }
+  function btTillNow(){ const d = document.getElementById('bt-search-date').value || todayStr(); return balancesAsOf(d, true); }
+  let btDone = false;
+  function btTillPreview(){
+    const el = document.getElementById('bt-till-after'); if (!el) return;
+    const now = btTillNow();
+    if (btDone && !(Number(document.getElementById('bt-deposit').value) > 0)) { el.innerHTML = `✅ Deposit recorded. <b>Tomorrow morning you start with:</b> Cash <b class="mono" style="color:var(--green);">${fmt(now.cash)}</b> + M-Pesa <b class="mono">${fmt(now.mpesa)}</b>`; return; }
+    btDone = false; const dep = Number(document.getElementById('bt-deposit').value) || 0;
+    const to = document.getElementById('bt-dep-to').value;
+    const cashLeft = now.cash - dep, toAfter = now[to] + dep;
+    const mp = to === 'mpesa' ? toAfter : now.mpesa;
+    el.innerHTML = dep > 0
+      ? `After this deposit — <b>Cash left for tomorrow: <span class="mono" style="color:var(--green);">${fmt(cashLeft)}</span></b> · M-Pesa: <b class="mono">${fmt(mp)}</b>${dep > now.cash + 0.01 ? ' <span style="color:var(--red,#e5534b);">(more than the cash you should have!)</span>' : ''}`
+      : `Enter the cash you want to keep for tomorrow and the deposit fills in by itself. Cash should be ${fmt(now.cash)} now.`;
+  }
+  async function btRecordDeposit(){
+    const date = document.getElementById('bt-search-date').value || todayStr();
+    const amt = Number(document.getElementById('bt-deposit').value) || 0;
+    const to = document.getElementById('bt-dep-to').value;
+    if (amt <= 0) { alert('Enter the amount you are depositing.'); return; }
+    const now = btTillNow();
+    if (amt > now.cash + 0.01 && !confirm(`You are depositing ${fmt(amt)} but the app expects only ${fmt(now.cash)} cash. Record anyway?`)) return;
+    const note = 'Evening cash deposit';
+    const btn = document.getElementById('bt-dep-btn'); btn.disabled = true;
+    try {
+      if (isServerMode()) {
+        const c = await apiRequest('/api/transfers', { method: 'POST', body: JSON.stringify({ date, from_account: 'cash', to_account: to, amount: amt, note }) });
+        state.transfers.unshift({ id: c.id, date: c.date, from: c.from_account, to: c.to_account, note: c.note, amount: c.amount });
+      } else state.transfers.unshift({ id: nextId(), date, from: 'cash', to, note, amount: amt });
+    } catch (err) { btn.disabled = false; alert('Could not save to server: ' + (err.message || 'unknown error')); return; }
+    btn.disabled = false;
+    document.getElementById('bt-deposit').value = '';
+    btDone = true;
+    saveStateToStorage(); renderAll();
+  }
+  function renderCashTill(targetDate){
+    const open = balancesAsOf(targetDate, false), now = balancesAsOf(targetDate, true);
+    const rows = [['cash', 'Cash'], ['mpesa', 'M-Pesa']];
+    ['pochi', 'moneybox'].forEach(k => { if (Math.abs(open[k]) > 0.004 || Math.abs(now[k]) > 0.004) rows.push([k, accountLabels[k]]); });
+    const f = v => fmt(Math.round(v * 100) / 100);
+    let tO = 0, tN = 0, tI = 0, tU = 0;
+    document.getElementById('bt-till-body').innerHTML = rows.map(([k, lab]) => {
+      const net = now[k] - open[k];
+      tO += open[k]; tN += now[k];
+      return `<tr><td>${lab}</td><td class="num mono">${f(open[k])}</td><td class="num mono ${net >= 0 ? 'green' : 'red'}">${net >= 0 ? '+' : ''}${f(net)}</td><td class="num mono"><strong>${f(now[k])}</strong></td></tr>`;
+    }).join('') + `<tr class="total-row"><td><strong>Total</strong></td><td class="num mono"><strong>${f(tO)}</strong></td><td class="num mono">${tN - tO >= 0 ? '+' : ''}${f(tN - tO)}</td><td class="num mono"><strong>${f(tN)}</strong></td></tr>`;
+    const keepEl = document.getElementById('bt-keep');
+    if (document.activeElement !== keepEl && document.activeElement !== document.getElementById('bt-deposit')) {
+      let saved = ''; try { saved = localStorage.getItem(btKeepKey()) || ''; } catch (e) {}
+      if (!keepEl.value) keepEl.value = saved;
+    }
+    document.getElementById('bt-dep-btn').closest('#bt-till-deposit').style.display = '';
+    btTillPreview();
+  }
+
   function renderBusinessToday(){
     const targetDate = document.getElementById('bt-search-date').value || todayStr();
     document.getElementById('bt-date-heading').textContent = `Daily Balance Sheet — ${targetDate}`;
+    renderCashTill(targetDate);
 
     // Filter day's general transactions
     const daySales = state.sales.filter(s => s.date === targetDate);
@@ -4338,7 +4450,7 @@
   function splRender(){
     const e = spl; if (!e) return;
     const st = 'width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2,transparent);color:inherit;font:inherit;';
-    const accOpts = a => ['pochi','mpesa','cash','moneybox'].map(k => `<option value="${k}" ${a === k ? 'selected' : ''}>${accountLabels[k]}</option>`).join('');
+    const accOpts = a => (e.accounts || ['pochi','mpesa','cash','moneybox']).map(k => `<option value="${k}" ${a === k ? 'selected' : ''}>${accountLabels[k]}</option>`).join('');
     document.getElementById('spl-title').textContent = e.title;
     document.getElementById('spl-body').innerHTML = `
       ${e.headHtml}
@@ -4687,7 +4799,7 @@
     if (sel.id === 'pm-p-type') { const pr = lastPumicePrice(t, 'purchase'); if (pr) document.getElementById('pm-p-price').value = pr; }
     if (sel.id === 'pm-e-type') { const pr = avgPumiceBuyPrice(t); if (pr) document.getElementById('pm-e-unit').value = pr; }
   }
-  function togglePumiceExpenseKind() {
+  function togglePumiceExpenseKind() { setTimeout(pefSync, 0);
     const qty = document.getElementById('pm-e-kind').value === 'qty';
     ['pm-e-type-box', 'pm-e-qty-box', 'pm-e-unit-box'].forEach(id => document.getElementById(id).classList.toggle('hidden', !qty));
     document.getElementById('pm-e-plain-box').classList.toggle('hidden', qty);
@@ -4715,7 +4827,7 @@
     return 0;
   }
   function pmMpesaPart(p){ return Math.round(((Number(p.amount) || 0) - pmCashPart(p)) * 100) / 100; }
-  function pmAcctLabel(a){ return a === 'cash' ? 'Cash' : a === 'split' ? 'Split' : 'M-Pesa'; }
+  function pmAcctLabel(a){ return a === 'cash' ? 'Cash' : a === 'split' ? 'Split' : a === 'credit' ? 'Credit' : 'M-Pesa'; }
   function pmPayLabel(p){
     if (p.account === 'split') return `M-Pesa ${fmt(pmMpesaPart(p))} + Cash ${fmt(pmCashPart(p))}`;
     return pmAcctLabel(p.account);
@@ -4758,6 +4870,7 @@
     const account = document.getElementById('pm-s-account').value || 'mpesa';
     let cash_part = 0;
     const total = Math.round(qty * price * 100) / 100;
+    if (account === 'credit' && !customer) { alert('Enter the customer name for a credit sale.'); return; }
     if (account === 'split') {
       cash_part = Number(document.getElementById('pm-s-cashpart').value) || 0;
       if (!(cash_part > 0) || !(cash_part < total)) { alert('For a split payment, enter the cash part: more than 0 and less than the total (' + fmt(total) + '). The rest is M-Pesa.'); return; }
@@ -4788,7 +4901,9 @@
       let done = 0;
       while (state.pumiceDraft.length) {
         const d = state.pumiceDraft[0];
-        const ok = await savePumiceRecord({ date: d.date, type: 'sale', desc: d.customer, qty: d.qty, amount: Math.round(d.qty * d.price * 100) / 100, item: d.item, account: d.account || 'mpesa', cash_part: d.account === 'split' ? d.cash_part : 0 });
+        const ok = d.account === 'credit'
+          ? await savePumiceCreditRow({ date: d.date, customer: d.customer, item: d.item, qty: d.qty, price: d.price })
+          : await savePumiceRecord({ date: d.date, type: 'sale', desc: d.customer, qty: d.qty, amount: Math.round(d.qty * d.price * 100) / 100, item: d.item, account: d.account || 'mpesa', cash_part: d.account === 'split' ? d.cash_part : 0 });
         if (!ok) { alert(done + ' item(s) were submitted. The rest stay in the draft so nothing is lost; try again.'); break; }
         state.pumiceDraft.shift(); done++;
         savePumiceDraft();
@@ -4813,6 +4928,9 @@
     const price = Number(document.getElementById('pm-p-price').value) || 0;
     const ok = await savePumiceRecord({ date, type: 'purchase', desc, qty, amount: Math.round(qty * price * 100) / 100, item });
     if (!ok) return;
+    const fee = mpFeeRead('ppf', qty * price);
+    if (fee > 0) await savePumiceRecord({ date, type: 'expense', desc: 'M-Pesa charges — ' + (desc || item), qty: 0, amount: fee, item: '' });
+    mpFeeReset('ppf');
     document.getElementById('pm-p-desc').value = '';
     document.getElementById('pm-p-qty').value = '1';
     document.getElementById('pm-p-price').value = '';
@@ -4838,6 +4956,9 @@
     }
     const ok = await savePumiceRecord(body);
     if (!ok) return;
+    const fee = withQty ? 0 : mpFeeRead('pef', body.amount);
+    if (fee > 0) await savePumiceRecord({ date, type: 'expense', desc: 'M-Pesa charges — ' + desc, qty: 0, amount: fee, item: '' });
+    mpFeeReset('pef');
     document.getElementById('pm-e-desc').value = '';
     document.getElementById('pm-e-qty').value = '1';
     document.getElementById('pm-e-amount').value = '';
@@ -4998,9 +5119,10 @@
     state.pumice.forEach(p => {
       const k = p.item || '(no type)';
       if (p.type === 'purchase') { row(k).bq += Number(p.qty) || 0; row(k).ba += Number(p.amount) || 0; }
-      else if (p.type === 'sale') { row(k).sq += Number(p.qty) || 0; row(k).sa += Number(p.amount) || 0; }
+      else if (p.type === 'sale' && Number(p.qty) > 0) { row(k).sq += Number(p.qty) || 0; row(k).sa += Number(p.amount) || 0; }
       else if (p.type === 'expense' && p.item) { row(k).lq += Number(p.qty) || 0; }
     });
+    pmCredits().forEach(c => { const k = c.item || '(no type)'; row(k).sq += Number(c.qty) || 0; row(k).sa += pmCrTotal(c); });
     const keys = Object.keys(t).sort();
     const n = v => Math.round(v * 100) / 100;
     body.innerHTML = keys.length ? keys.map(k => {
@@ -5011,10 +5133,147 @@
     }).join('') : '<tr class="empty-row"><td colspan="7">Log a Pumice purchase to see stock here.</td></tr>';
   }
 
+  // ---- Pumice credit sales (Pumice dashboard only: nothing here touches Overview, Sales or Credit Loans) ----
+  function pmCredits(){ return state.pumiceCredit || (state.pumiceCredit = []); }
+  function pmCrTotal(c){ return Math.round((Number(c.qty) || 0) * (Number(c.price) || 0) * 100) / 100; }
+  function pmCrBal(c){ return Math.max(0, Math.round((pmCrTotal(c) - (Number(c.paid) || 0)) * 100) / 100); }
+  async function savePumiceCreditRow(d){
+    try {
+      if (isServerMode()) {
+        const c = await apiRequest('/api/pumice-credit', { method: 'POST', body: JSON.stringify({ date: d.date, customer: d.customer, item: d.item, qty: d.qty, price: d.price, paid: 0 }) });
+        pmCredits().unshift({ id: c.id, date: c.date, customer: c.customer, item: c.item || '', qty: c.qty, price: c.price, paid: c.paid || 0 });
+      } else pmCredits().unshift({ id: nextId(), date: d.date, customer: d.customer, item: d.item, qty: d.qty, price: d.price, paid: 0 });
+    } catch (err) { alert('Could not save to server: ' + (err.message || 'unknown error')); return false; }
+    saveStateToStorage(); renderAll(); return true;
+  }
+  function renderPumiceCredit(){
+    const el = document.getElementById('pm-credit-card'); if (!el) return;
+    const all = pmCredits(); const q = (state.pmCreditQ || '').trim().toLowerCase();
+    const rows = all.filter(c => !q || (c.customer + ' ' + c.item).toLowerCase().includes(q)).sort((a, b) => (pmCrBal(b) > 0) - (pmCrBal(a) > 0) || String(b.date).localeCompare(String(a.date)));
+    const out = all.reduce((a, c) => a + pmCrBal(c), 0), f = v => fmt(Math.round(v * 100) / 100);
+    el.innerHTML = `<div class="card-head"><div><h3>Pumice Credit Sales</h3><div class="sub">Pumice given on credit. Only here: not in Overview, Sales or Credit Loans. Money counts as Pumice sales when the customer pays.</div></div>
+      <div style="text-align:right;"><div class="sub">Outstanding</div><div class="mono" style="font-size:22px;font-weight:800;color:var(--amber, #f59e0b);">${f(out)}</div></div></div>
+      ${all.length ? `<div class="search-filter-bar"><div class="field"><label>Search customer / pumice type</label><input type="text" placeholder="Type name..." value="${reEsc(state.pmCreditQ || '')}" oninput="state.pmCreditQ=this.value;renderPumiceCredit()"></div></div>
+      <div class="table-container"><table><thead><tr><th>Date</th><th>Customer</th><th>Pumice</th><th class="num">Qty</th><th class="num">Total</th><th class="num">Paid</th><th class="num">Balance</th><th>Action</th></tr></thead><tbody>
+      ${rows.map(c => `<tr><td>${reEsc(c.date)}</td><td><strong>${reEsc(c.customer)}</strong></td><td>${reEsc(c.item || '—')}</td><td class="num mono">${c.qty}</td><td class="num mono">${f(pmCrTotal(c))}</td><td class="num mono">${f(c.paid || 0)}</td><td class="num mono ${pmCrBal(c) > 0 ? 'red' : 'green'}">${pmCrBal(c) > 0 ? f(pmCrBal(c)) : 'Paid ✓'}</td>
+        <td>${pmCrBal(c) > 0 ? `<button class="btn btn-secondary btn-small" onclick="pmCreditPay(${c.id})">+ Pay</button> ` : ''}<button class="row-del" title="Delete" onclick="pmCreditDelete(${c.id})">✕</button></td></tr>`).join('') || '<tr class="empty-row"><td colspan="8">No matches.</td></tr>'}
+      </tbody></table></div>` : '<div class="sub" style="padding:8px 0;">No credit sales yet. In "Log Pumice Sale" choose <b>Paid via → Credit (pay later)</b>.</div>'}`;
+  }
+  function pmCreditPay(id){
+    const c = pmCredits().find(x => x.id === id); if (!c) return; const bal = pmCrBal(c);
+    splOpen({
+      title: 'Pumice credit payment', balance: bal, accounts: ['mpesa', 'cash'], date: todayStr(),
+      linesLabel: 'Payment lines — add another line to split between M-Pesa and Cash', accLabel: 'Received in',
+      headHtml: `<div style="margin-bottom:12px;"><div style="font-weight:700;">${reEsc(c.customer)} — ${reEsc(c.item || '')} × ${c.qty}</div><div class="sub">Balance: ${fmt(bal)}</div></div>
+        <div style="margin-bottom:14px;"><div class="sub" style="margin-bottom:4px;">Payment date</div><input type="date" style="${splInputStyle}" value="${todayStr()}" oninput="spl.date=this.value"></div>`,
+      lines: [{ amount: bal, account: 'mpesa' }],
+      onSave: async () => {
+        const lines = spl.lines.filter(l => Number(l.amount) > 0), tot = lines.reduce((x, l) => x + Number(l.amount), 0);
+        if (!lines.length) { alert('Enter a payment amount.'); return; }
+        if (tot > bal + 0.01) { alert('Payment is more than the balance of ' + fmt(bal) + '.'); return; }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(spl.date || '')) { alert('Please choose a valid date.'); return; }
+        const date = spl.date, btn = document.getElementById('spl-save'); btn.disabled = true;
+        let paidNow = 0;
+        try {
+          for (const l of lines) {
+            const ok = await savePumiceRecord({ date, type: 'sale', desc: c.customer, qty: 0, amount: Number(l.amount), item: '', account: l.account, cash_part: 0 });
+            if (!ok) break; paidNow += Number(l.amount);
+          }
+          if (paidNow > 0) {
+            c.paid = Math.round(((Number(c.paid) || 0) + paidNow) * 100) / 100;
+            if (isServerMode()) await apiRequest('/api/pumice-credit/' + c.id, { method: 'PUT', body: JSON.stringify({ paid: c.paid }) });
+          }
+        } catch (err) { alert('Payment recorded, but the credit balance could not be updated: ' + (err.message || 'error')); }
+        splClose(); saveStateToStorage(); renderAll();
+      }
+    });
+  }
+  async function pmCreditDelete(id){
+    const c = pmCredits().find(x => x.id === id); if (!c) return;
+    if (!confirm('Delete this credit sale for ' + c.customer + '? Payments already received stay in the Pumice sales.')) return;
+    try { if (isServerMode()) await apiRequest('/api/pumice-credit/' + id, { method: 'DELETE' }); }
+    catch (err) { alert('Could not delete: ' + (err.message || 'error')); return; }
+    state.pumiceCredit = pmCredits().filter(x => x.id !== id); saveStateToStorage(); renderAll();
+  }
+
+  // ---- Pumice batches (consignment): a settlement withdrawal closes a batch; money totals restart from zero ----
+  const PM_SETTLE_PREFIX = '✅ Settlement';
+  function isPmSettle(p){ return p.type === 'withdrawal' && String(p.desc || '').startsWith(PM_SETTLE_PREFIX); }
+  function pmSettlements(){ return state.pumice.filter(isPmSettle).sort((a, b) => a.id - b.id); }
+  function pmCycleStartId(){ const s = pmSettlements(); return s.length ? s[s.length - 1].id : 0; }
+  function pmView(){ if (state.pmShowAll) return state.pumice; const id = pmCycleStartId(); return state.pumice.filter(p => p.id > id); }
+  function pmTotals(rows){
+    const sum = t => rows.filter(p => p.type === t && !isPumiceWriteOff(p)).reduce((a, p) => a + (Number(p.amount) || 0), 0);
+    const sales = rows.filter(p => p.type === 'sale').reduce((a, p) => a + (Number(p.amount) || 0), 0);
+    const purchases = sum('purchase'), expenses = rows.filter(p => p.type === 'expense').reduce((a, p) => a + (Number(p.amount) || 0), 0);
+    const withdrawn = rows.filter(p => p.type === 'withdrawal' && !isPmSettle(p)).reduce((a, p) => a + (Number(p.amount) || 0), 0);
+    return { sales, purchases, expenses, withdrawn, owed: sales - purchases - expenses - withdrawn };
+  }
+  function pmBatchRows(){
+    const st = pmSettlements(); const out = []; let prev = 0;
+    st.forEach(m => { out.push({ m, rows: state.pumice.filter(p => p.id > prev && p.id <= m.id) }); prev = m.id; });
+    return out;
+  }
+  function renderPumiceBatchCard(){
+    const el = document.getElementById('pm-batch-card'); if (!el) return;
+    const cur = state.pumice.filter(p => p.id > pmCycleStartId());
+    const t = pmTotals(cur), st = pmSettlements(), last = st[st.length - 1];
+    const hist = pmBatchRows().reverse();
+    const f = v => fmt(Math.round(v * 100) / 100);
+    el.innerHTML = `
+      <div style="display:flex;flex-wrap:wrap;gap:12px;justify-content:space-between;align-items:center;">
+        <div>
+          <div style="font-weight:800;font-size:16px;">Current batch ${st.length + 1}</div>
+          <div class="sub">${last ? 'Started after the settlement of ' + reEsc(last.date) : 'Since the beginning'} · Sales ${f(t.sales)} − expenses ${f(t.expenses + t.purchases)} − already paid ${f(t.withdrawn)}</div>
+          <div style="margin-top:6px;font-size:14px;">Still owed to the owner: <b class="mono" style="font-size:20px;color:var(--green);">${f(t.owed)}</b></div>
+        </div>
+        <button class="btn btn-primary" onclick="pmSettleOpen()">🔄 New batch / settle with owner</button>
+      </div>
+      <label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px;cursor:pointer;"><input type="checkbox" ${state.pmShowAll ? 'checked' : ''} onchange="state.pmShowAll=this.checked;renderPumice()"> Include past batches in the cards above (ledgers always show everything)</label>
+      ${hist.length ? `<details style="margin-top:10px;"><summary style="cursor:pointer;font-weight:700;">Past batches (${hist.length})</summary>
+        <div class="table-container" style="margin-top:8px;"><table><thead><tr><th>Batch</th><th>Settled on</th><th>Owner / note</th><th class="num">Sales</th><th class="num">Expenses</th><th class="num">Paid before</th><th class="num">Final payout</th></tr></thead><tbody>
+        ${hist.map((h, i) => { const tt = pmTotals(h.rows); return `<tr><td>${hist.length - i}</td><td>${reEsc(h.m.date)}</td><td>${reEsc(String(h.m.desc).replace(PM_SETTLE_PREFIX, '').replace(/^\s*[—-]\s*/, '') || '—')}</td><td class="num mono">${f(tt.sales)}</td><td class="num mono">${f(tt.expenses + tt.purchases)}</td><td class="num mono">${f(tt.withdrawn)}</td><td class="num mono"><b>${f(Number(h.m.amount) || 0)}</b></td></tr>`; }).join('')}
+        </tbody></table></div></details>` : ''}`;
+  }
+  function pmSettleOpen(){
+    const cur = state.pumice.filter(p => p.id > pmCycleStartId()); const t = pmTotals(cur);
+    const owed = Math.round(t.owed * 100) / 100;
+    const o = document.createElement('div'); o.id = 'pm-settle-overlay'; o.className = 'receipt-modal-overlay';
+    o.onclick = ev => { if (ev.target === o) o.remove(); };
+    const st = 'width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel-alt);color:var(--text);font:inherit;';
+    o.innerHTML = `<div class="receipt-modal" style="max-width:480px;">
+      <div class="receipt-modal-head"><h3>New batch — settle with owner</h3><button class="receipt-modal-close" onclick="document.getElementById('pm-settle-overlay').remove()">✕</button></div>
+      <div class="receipt-modal-body" style="padding:16px;">
+        <div class="sub" style="margin-bottom:10px;">Sales ${fmt(t.sales)} − expenses ${fmt(t.expenses + t.purchases)} − already paid ${fmt(t.withdrawn)}</div>
+        <div style="font-size:15px;margin-bottom:12px;">${owed > 0 ? 'Pay the owner now:' : 'Nothing is owed to the owner:'} <b class="mono" style="font-size:22px;color:var(--green);">${fmt(Math.max(0, owed))}</b>${owed < 0 ? '<div class="sub" style="margin-top:4px;">The expenses are more than the sales by ' + fmt(-owed) + '. The new batch still starts at zero.</div>' : ''}</div>
+        <div class="sub" style="margin-bottom:4px;">Owner name / batch note</div><input id="pm-settle-owner" style="${st}margin-bottom:10px;" placeholder="e.g. Mzee Otieno">
+        <div class="sub" style="margin-bottom:4px;">Date</div><input type="date" id="pm-settle-date" style="${st}" value="${todayStr()}">
+        <div class="sub" style="margin-top:10px;">${owed > 0 ? 'This records a final payout to the owner from M-Pesa, so the Pumice account becomes 0. Past records are kept in Past batches.' : 'Past records stay in the ledgers.'} Unsold stock stays in stock.</div>
+      </div>
+      <div class="receipt-modal-actions"><button class="btn btn-secondary" onclick="document.getElementById('pm-settle-overlay').remove()">Cancel</button>
+      <button class="btn btn-primary" id="pm-settle-go" onclick="pmSettleConfirm(${owed})">Settle &amp; start new batch</button></div></div>`;
+    document.body.appendChild(o);
+  }
+  async function pmSettleConfirm(owed){
+    const owner = document.getElementById('pm-settle-owner').value.trim();
+    if (!owner) { alert('Enter the owner name or a batch note.'); return; }
+    const date = document.getElementById('pm-settle-date').value || todayStr();
+    const btn = document.getElementById('pm-settle-go'); btn.disabled = true;
+    const ok = await savePumiceRecord({ date, type: 'withdrawal', desc: PM_SETTLE_PREFIX + ' — ' + owner, qty: 1, amount: Math.max(0, owed), item: '' });
+    btn.disabled = false;
+    if (!ok) return;
+    document.getElementById('pm-settle-overlay').remove();
+    state.pmShowAll = false; renderAll();
+    alert('Done. A new Pumice batch has started from zero.');
+  }
+
   function renderPumice(){
   fillPumiceTypeSelects();
+    renderPumiceBatchCard();
+    renderPumiceCredit();
+    const PV = pmView();
     const period = state.pumicePeriod;
-    const filtered = filterPumiceByPeriod(state.pumice, period);
+    const filtered = filterPumiceByPeriod(PV, period);
 
     const sales = filtered.filter(p => p.type === 'sale');
     const purchases = filtered.filter(p => p.type === 'purchase');
@@ -5028,7 +5287,7 @@
 
     // Singular M-Pesa Cash stored
     let mpesaVault = 0;
-    state.pumice.forEach(p => {
+    PV.forEach(p => {
       if (isPumiceWriteOff(p)) return;
       if (p.type === 'sale') { mpesaVault += pmMpesaPart(p); }
       else mpesaVault -= p.amount;
@@ -5052,9 +5311,9 @@
     document.getElementById('pm-net-profit').textContent = fmt(netProfit);
     document.getElementById('pm-margin-perc').textContent = `Margin ${margin}`;
     document.getElementById('pm-mpesa-cash').textContent = fmt(mpesaVault);
-    document.getElementById('pm-cash-hand').textContent = fmt(state.pumice.filter(p => p.type === 'sale').reduce((a, p) => a + pmCashPart(p), 0));
+    document.getElementById('pm-cash-hand').textContent = fmt(PV.filter(p => p.type === 'sale').reduce((a, p) => a + pmCashPart(p), 0));
 
-    const allWithdrawals = state.pumice.filter(p => p.type === 'withdrawal');
+    const allWithdrawals = PV.filter(p => p.type === 'withdrawal');
     const totWithdrawn = allWithdrawals.reduce((s, x) => s + Number(x.amount), 0);
     document.getElementById('pm-total-withdrawn').textContent = fmt(totWithdrawn);
     document.getElementById('pm-withdrawn-sub').textContent = `${allWithdrawals.length} withdrawal${allWithdrawals.length !== 1 ? 's' : ''}`;
@@ -5704,6 +5963,7 @@
     updatePurchaseSplitRemaining();
   }
   function updatePurchaseSplitRemaining(){
+    mpFeeSync('pf', purchaseMpesaBase());
     const lbl = document.getElementById('p-split-remaining-label'); if(!lbl) return;
     const total = purchaseReceiptTotal();
     const a = readSplit('p-split-', P_SPLIT_FIELDS);
@@ -5738,6 +5998,7 @@
 
     const items = state.stagedPurchaseItems.slice();
     const receiptId = newReceiptId();
+    const feeAmt = mpFeeRead('pf', purchaseMpesaBase());
 
     if (document.getElementById('p-split-toggle') && document.getElementById('p-split-toggle').checked) {
       const total = purchaseReceiptTotal();
@@ -5766,9 +6027,11 @@
         alert('Could not save to server: ' + (err.message || 'unknown error'));
         return;
       }
+      try { await mpPostGeneralFee(date, supplier, feeAmt); } catch (err) { alert('Purchase saved, but the M-Pesa charge could not be saved: ' + (err.message || 'error')); }
       state.stagedPurchaseItems = [];
       renderStagedPurchaseReceipt();
       resetPurchaseSplitPanel();
+      mpFeeReset('pf');
       saveStateToStorage();
       renderAll();
       alert('Purchase receipt submitted successfully (split across ' + portions.length + ' account' + (portions.length>1?'s':'') + ')!');
@@ -5794,11 +6057,13 @@
       });
     }
 
+    try { await mpPostGeneralFee(date, supplier, feeAmt); } catch (err) { alert('Purchase saved, but the M-Pesa charge could not be saved: ' + (err.message || 'error')); }
     state.stagedPurchaseItems = [];
     renderStagedPurchaseReceipt();
+    mpFeeReset('pf');
     saveStateToStorage();
     renderAll();
-    alert('Purchase receipt submitted successfully!');
+    alert('Purchase receipt submitted successfully!' + (feeAmt > 0 ? ' M-Pesa charge ' + fmt(feeAmt) + ' added to Expenses.' : ''));
   }
 
   const DRAFT_SALES_KEY = 'kray_draft_sales_items';
@@ -7106,19 +7371,75 @@
     if (prod && prod.cost > 0) document.getElementById('e-unit').value = prod.cost;
   }
 
+  // ---------------------------------------------------------------
+  // M-PESA TRANSACTION CHARGES (Send Money tariff, editable per entry)
+  // ---------------------------------------------------------------
+  const MPESA_TARIFF = [[100,0],[500,7],[1000,13],[1500,23],[2500,33],[3500,53],[5000,57],[7500,78],[10000,90],[15000,100],[20000,105],[Infinity,108]];
+  function mpesaCharge(a){ a = Number(a) || 0; if (a <= 0) return 0; for (const [m, c] of MPESA_TARIFF) if (a <= m) return c; return 108; }
+  function mpFeeToggle(p){
+    try { localStorage.setItem('kray_mpfee_on', document.getElementById(p + '-on').checked ? '1' : '0'); } catch (e) {}
+    ['pf','ef','ppf','pef'].forEach(q => { const c = document.getElementById(q + '-on'); if (c && q !== p) c.checked = document.getElementById(p + '-on').checked; });
+  }
+  function mpFeeSync(p, base){
+    const box = document.getElementById(p + '-box'); if (!box) return;
+    base = Number(base) || 0;
+    box.style.display = base > 0 ? '' : 'none';
+    const amt = document.getElementById(p + '-amt'), on = document.getElementById(p + '-on');
+    if (base > 0 && !amt.dataset.manual) {
+      amt.value = mpesaCharge(base);
+      try { const sv = localStorage.getItem('kray_mpfee_on'); if (sv !== null) on.checked = sv === '1'; } catch (e) {}
+    }
+  }
+  function mpFeeRead(p, base){
+    const on = document.getElementById(p + '-on'), amt = document.getElementById(p + '-amt');
+    if (!on || !on.checked || !(Number(base) > 0)) return 0;
+    return Math.round((Number(amt.value) || 0) * 100) / 100;
+  }
+  function mpFeeReset(p){ const a = document.getElementById(p + '-amt'); if (a) { a.dataset.manual = ''; a.value = ''; } const b = document.getElementById(p + '-box'); if (b) b.style.display = 'none'; }
+  async function mpPostGeneralFee(date, label, amt){
+    if (!(amt > 0)) return;
+    const body = { date, name: 'M-Pesa charges — ' + label, category: 'M-Pesa Charges', amount: amt, account: 'mpesa', item: '', qty: 0 };
+    if (isServerMode()) {
+      const c = await apiRequest('/api/expenses', { method: 'POST', body: JSON.stringify(body) });
+      state.expenses.unshift({ id: c.id, name: c.name, amount: c.amount, date: c.date, category: c.category, account: c.account, item: '', qty: 0 });
+    } else state.expenses.unshift(Object.assign({ id: nextId() }, body));
+  }
+  function purchaseMpesaBase(){
+    const tot = purchaseReceiptTotal();
+    const sp = document.getElementById('p-split-toggle');
+    if (sp && sp.checked) return readSplit('p-split-', P_SPLIT_FIELDS).mpesa || 0;
+    const ac = document.getElementById('p-account'); return ac && ac.value === 'mpesa' ? tot : 0;
+  }
+  function expMpesaBase(){
+    const kind = document.getElementById('e-kind'); if (kind && kind.value === 'qty') return 0;
+    const acc = document.getElementById('e-account').value, amt = Number(document.getElementById('e-amount').value) || 0;
+    if (acc === 'mpesa') return amt;
+    if (acc === 'split') return expSplit.filter(l => l.account === 'mpesa').reduce((x, l) => x + (Number(l.amount) || 0), 0);
+    return 0;
+  }
+  function efSync(){ mpFeeSync('ef', expMpesaBase()); }
+  function ppfSync(){ mpFeeSync('ppf', (Number(document.getElementById('pm-p-qty').value) || 0) * (Number(document.getElementById('pm-p-price').value) || 0)); }
+  function pefSync(){
+    const plain = document.getElementById('pm-e-kind').value !== 'qty';
+    mpFeeSync('pef', plain ? Number(document.getElementById('pm-e-amount').value) || 0 : 0);
+  }
+
   // ---- Quantity x price helper and split payment lines for new expenses ----
   let expSplit = [{ amount: '', account: 'cash' }, { amount: '', account: 'mpesa' }];
   function expCalc(){
     const q = Number(document.getElementById('e-pqty').value) || 0, u = Number(document.getElementById('e-punit').value) || 0;
     if (q > 0 && u > 0) { document.getElementById('e-amount').value = Math.round(q * u * 100) / 100; expSplitSync(); }
+    efSync();
   }
   function expAccChange(){
     const on = document.getElementById('e-account').value === 'split';
     document.getElementById('e-split-box').style.display = on ? '' : 'none';
     document.getElementById('e-amount').readOnly = on && false;
     if (on) expSplitRender();
+    efSync();
   }
   function expSplitSync(){
+    efSync();
     const on = document.getElementById('e-account').value === 'split'; if (!on) return;
     const tot = Number(document.getElementById('e-amount').value) || 0;
     const sum = expSplit.reduce((x, l) => x + (Number(l.amount) || 0), 0);
@@ -7205,6 +7526,7 @@
       if (expReceiptData) payload.receipt_img = expReceiptData;
     }
 
+    const feeAmtE = mpFeeRead('ef', expMpesaBase());
     const parts = payload.splitLines
       ? payload.splitLines.map((l, i) => Object.assign({}, payload, { amount: l.amount, account: l.account, qty: i === 0 ? payload.qty : 0, receipt_img: i === 0 ? payload.receipt_img : undefined, splitLines: undefined }))
       : [payload];
@@ -7217,6 +7539,7 @@
           state.expenses.unshift({ id: nextId(), ...pt });
         }
       }
+      if (feeAmtE > 0) await mpPostGeneralFee(payload.date, payload.name, feeAmtE);
     } catch (err) {
       alert('Could not save to server: ' + (err.message || 'unknown error'));
       saveStateToStorage(); renderAll();
@@ -7233,7 +7556,7 @@
     document.getElementById('e-unit').value = '';
     document.getElementById('e-pqty').value = ''; document.getElementById('e-punit').value = '';
     expSplit = [{ amount: '', account: 'cash' }, { amount: '', account: 'mpesa' }]; document.getElementById('e-account').value = 'cash'; expAccChange();
-    expReceiptClear();
+    expReceiptClear(); mpFeeReset('ef');
   }
 
   async function addExpenseFromProfit(e){
