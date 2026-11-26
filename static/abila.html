@@ -1292,6 +1292,10 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
       Statistics
     </button>
+    <button class="nav-btn" data-section="reports" onclick="navigate('reports')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/><path d="M8 13h8M8 17h5"/></svg>
+      Reports
+    </button>
     <button class="nav-btn" data-section="purchases" onclick="navigate('purchases')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h2l2.4 12.2a2 2 0 0 0 2 1.8h8.2a2 2 0 0 0 2-1.6L21 8H6"/><circle cx="9" cy="20" r="1"/><circle cx="17" cy="20" r="1"/></svg>
       Purchases
@@ -1494,6 +1498,7 @@
           </div>
         </div>
 
+        <div id="bt-lock-card" style="display:none;margin-top:12px;padding:12px 14px;border-radius:12px;background:var(--panel-alt);"></div>
         <div class="stat-grid" style="margin-top: 15px;">
           <div class="panel stat-card">
             <div class="label">Day's Sales Revenue</div>
@@ -1521,9 +1526,15 @@
           <div class="card-head"><div><h3>Cash Till — morning to evening</h3><div class="sub">Start of day + what came in and went out = what you should have now. Then deposit the extra and keep a float for tomorrow.</div></div></div>
           <div class="table-container">
             <table>
-              <thead><tr><th>Account</th><th class="num">Morning start</th><th class="num">Net today (+/−)</th><th class="num">Should have now</th></tr></thead>
+              <thead><tr><th>Account</th><th class="num">Morning count (type it)</th><th class="num">Net today (+/−)</th><th class="num">Should have now</th></tr></thead>
               <tbody id="bt-till-body"></tbody>
             </table>
+          </div>
+          <div id="bt-open-note" class="sub" style="margin-top:10px;"></div>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
+            <button type="button" class="btn btn-primary" onclick="btSaveOpenings()">Save morning count</button>
+            <button type="button" class="btn btn-secondary" id="bt-fix-books" style="display:none;" onclick="btFixBooks()">Make the books match my morning count</button>
+            <button type="button" class="btn btn-secondary" id="bt-clear-open" style="display:none;" onclick="btClearOpenings()">Use yesterday's closing instead</button>
           </div>
           <div id="bt-till-deposit" style="margin-top:14px;padding:14px;border-radius:12px;background:var(--panel-alt);">
             <div style="font-weight:700;margin-bottom:8px;">Evening deposit</div>
@@ -1972,7 +1983,7 @@
       <!-- BEST CUSTOMERS -->
       <div class="card">
         <div class="card-head">
-          <div><h3>Best Customers</h3><div class="sub" id="st-cust-sub">Ranked by what they bought (cash sales + goods on credit)</div></div>
+          <div><h3>Best Customers</h3><div class="sub" id="st-cust-sub">Bought = cash sales + goods on credit. Paid = cash sales + credit loan payments received.</div></div>
         </div>
         <div class="filter-row" style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px;">
           <select id="st-cust-range" onchange="renderTopCustomers()" style="padding:8px 10px; border-radius:8px; border:1px solid var(--line); background:transparent; color:inherit; font:inherit;">
@@ -1987,12 +1998,16 @@
             <option value="inactive">Not bought in 30+ days</option>
             <option value="owing">Owing a loan</option>
           </select>
+          <select id="st-cust-rank" onchange="renderTopCustomers()" style="padding:8px 10px; border-radius:8px; border:1px solid var(--line); background:transparent; color:inherit; font:inherit;">
+            <option value="bought">Rank by total bought</option>
+            <option value="paid">Rank by cash paid</option>
+          </select>
           <input type="text" id="st-cust-search" placeholder="Search customer..." oninput="renderTopCustomers()" style="flex:1; min-width:140px; padding:8px 10px; border-radius:8px; border:1px solid var(--line); background:transparent; color:inherit; font:inherit;">
         </div>
         <div class="table-container">
           <table>
-            <thead><tr><th>#</th><th>Customer</th><th>Phone</th><th class="num">Orders</th><th class="num">Spent</th><th>Last Bought</th><th class="num">Owes</th></tr></thead>
-            <tbody id="st-top-customers"><tr class="empty-row"><td colspan="7">No customer sales in this period.</td></tr></tbody>
+            <thead><tr><th>#</th><th>Customer</th><th>Phone</th><th class="num">Orders</th><th class="num">Bought</th><th class="num">Paid (cash in)</th><th>Last Bought</th><th class="num">Owes</th></tr></thead>
+            <tbody id="st-top-customers"><tr class="empty-row"><td colspan="8">No customer sales in this period.</td></tr></tbody>
           </table>
         </div>
       </div>
@@ -2047,6 +2062,30 @@
     </div>
 
     <!-- PURCHASES -->
+    <div class="section" id="section-reports">
+      <div class="card">
+        <div class="card-head">
+          <div><h3>📄 Business report</h3><div class="sub">Sales, expenses, M-Pesa charges, credit owed and Pumice owed on one page</div></div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end;">
+          <div class="field" style="margin:0;"><label>Period</label>
+            <select id="rp-kind" onchange="renderReports()">
+              <option value="week">This week</option><option value="lastweek">Last week</option>
+              <option value="month">This month</option><option value="lastmonth">Last month</option>
+              <option value="custom">Pick dates…</option>
+            </select></div>
+          <div class="field" style="margin:0;"><label>From</label><input type="date" id="rp-from" onchange="document.getElementById('rp-kind').value='custom';renderReports()"></div>
+          <div class="field" style="margin:0;"><label>To</label><input type="date" id="rp-to" onchange="document.getElementById('rp-kind').value='custom';renderReports()"></div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;">
+          <button class="btn" onclick="rpPrint()">🖨 Print / Save as PDF</button>
+          <button class="btn btn-secondary" onclick="rpEmail()">✉ Email me this report</button>
+        </div>
+        <div class="sub" id="rp-msg" style="margin-top:8px;"></div>
+      </div>
+      <div class="card" style="margin-top:16px;overflow:auto;"><div id="rp-body"></div></div>
+    </div>
+
     <div class="section" id="section-purchases">
       <div class="card">
         <div class="card-head">
@@ -2717,8 +2756,9 @@
           </table>
         </div>
         <div class="field" style="margin-top:14px;"><label>Note (optional)</label><input type="text" id="rc-note" placeholder="e.g. End of day check"></div>
-        <button class="btn btn-primary" style="width:100%;" onclick="saveReconciliation()">Save this count</button>
-        <div class="sub" style="margin-top:8px;">Leave an account blank to skip it. Green = matches, amber = more money than expected, red = money missing. Saving only records the check; nothing in your books changes unless you press Adjust.</div>
+        <button class="btn btn-primary" style="width:100%;" onclick="saveReconciliation(true)">Save count &amp; make the app match it</button>
+        <button class="btn btn-secondary" style="width:100%;margin-top:8px;" onclick="saveReconciliation()">Only save the count (don't change the books)</button>
+        <div class="sub" style="margin-top:8px;">Leave an account blank to skip it. Green = matches, amber = more money than expected, red = money missing. “Make the app match” fixes each differing balance for you: the difference is recorded as a balance adjustment only (Cash & Transfers list). It never changes your net profit, so you can record the real expenses later.</div>
         <div class="auth-error" id="rc-msg" style="display:none; margin-top:12px;"></div>
       </div>
       <div class="card" style="margin-top:20px;">
@@ -2763,6 +2803,15 @@
             <input type="checkbox" id="staff-can-delete" onchange="saveStaffDelete(this.checked)" style="margin-top:4px;">
             <span><b>Staff can delete records</b><br><span class="sub">Turn off so only you can delete sales, purchases, expenses and other records. Staff can still add and edit.</span></span>
           </label>
+          <label style="display:flex; gap:10px; align-items:flex-start; cursor:pointer; margin-top:14px;">
+            <input type="checkbox" id="staff-can-edit" onchange="saveStaffEdit(this.checked)" style="margin-top:4px;">
+            <span><b>Staff can edit records</b><br><span class="sub">Turn off so staff can only add new records; only you can change existing ones.</span></span>
+          </label>
+          <label style="display:flex; gap:10px; align-items:flex-start; cursor:pointer; margin-top:14px;">
+            <input type="checkbox" id="auto-reports" onchange="saveAutoReports(this.checked)" style="margin-top:4px;">
+            <span><b>Email me weekly &amp; monthly reports</b><br><span class="sub">Every Monday morning (last week) and on the 1st of each month (last month), sent to the owner's email only.</span></span>
+          </label>
+          <div class="sub" style="margin-top:12px;">Always owner-only: balance counts &amp; Reconcile adjustments, morning counts, Pumice settlement, closing/reopening days, backups and restore, managing the team.</div>
           <div class="sub" style="margin-top:12px;">Backups, restoring data and managing the team are always owner-only. New devices must enter an emailed code the first time they sign in.</div>
         </div>
         <div class="card" id="owner-logins-card">
@@ -2881,6 +2930,8 @@
     </div>
     <div class="receipt-modal-actions">
       <button class="btn btn-secondary" onclick="downloadReceipt()">⬇ Download</button>
+      <button class="btn btn-secondary" onclick="whatsappReceipt()">💬 WhatsApp</button>
+      <button class="btn btn-secondary" onclick="shareReceipt()">📤 Share</button>
       <button class="btn btn-primary" onclick="printReceipt()">🖨 Print</button>
     </div>
   </div>
@@ -2916,6 +2967,7 @@
     transfers: [], // Transfers between account stores: { id, date, from, to, note, amount }
     expenses: [],
     pumiceCredit: [],
+    dayOpenings: [],
     pumice: [], // Isolated Pumice records: { id, date, type ('sale'|'purchase'|'expense'), desc, qty, amount }
     manualStockLogs: [],
     products: [], // Product catalog: { id, name, category, cost, price }
@@ -3036,6 +3088,12 @@
 
     let body = null;
     try { body = await resp.json(); } catch (e) {}
+    if (resp.status === 423 && body && body.needs_reason && !(options.headers && options.headers['X-Override-Reason'])) {
+      const why = prompt(body.error + '\n\nType the reason (it is saved in the activity log):');
+      if (why && why.trim().length >= 3) {
+        return apiRequest(path, Object.assign({}, options, { headers: Object.assign({}, options.headers || {}, { 'X-Override-Reason': why.trim() }) }));
+      }
+    }
     if (!resp.ok) {
       const err = new Error((body && body.error) || ('Request failed: ' + resp.status));
       err.status = resp.status;
@@ -3207,6 +3265,7 @@
       expenses: state.expenses,
       pumice: state.pumice,
       pumiceCredit: state.pumiceCredit || [],
+      dayOpenings: state.dayOpenings || [],
       manualStockLogs: state.manualStockLogs,
       products: state.products,
       users: state.users,
@@ -3224,6 +3283,7 @@
     state.expenses = parsed.expenses || [];
     state.pumice = parsed.pumice || [];
     state.pumiceCredit = parsed.pumiceCredit || [];
+    state.dayOpenings = parsed.dayOpenings || [];
     state.manualStockLogs = parsed.manualStockLogs || [];
     state.products = parsed.products || [];
     state.users = parsed.users || [];
@@ -3938,7 +3998,7 @@
 
   async function loadAllDataFromServer() {
     try {
-      const [products, purchases, sales, creditSales, expenses, cash, transfers, pumice, stockLogs, comments, priceHistory, recons, pumiceTypes, contacts, pumiceCredit] = await Promise.all([
+      const [products, purchases, sales, creditSales, expenses, cash, transfers, pumice, stockLogs, comments, priceHistory, recons, pumiceTypes, contacts, pumiceCredit, dayOpenings] = await Promise.all([
         apiRequest('/api/products'),
         apiRequest('/api/purchases'),
         apiRequest('/api/sales'),
@@ -3954,7 +4014,9 @@
         apiRequest('/api/pumice-types').catch(() => []),
         apiRequest('/api/customer-contacts').catch(() => []),
         apiRequest('/api/pumice-credit').catch(() => []),
+        apiRequest('/api/day-openings').catch(() => []),
       ]);
+      state.dayOpenings = (dayOpenings || []).map(o => ({ id: o.id, date: o.date, account: o.account, amount: o.amount }));
       state.pumiceCredit = (pumiceCredit || []).map(c => ({ id: c.id, date: c.date, customer: c.customer, item: c.item || '', qty: c.qty, price: c.price, paid: c.paid || 0 }));
       state.priceHistory = priceHistory || [];
       state.reconciliations = recons || [];
@@ -4108,6 +4170,7 @@
     overview: ['Overview', 'Everything about your business and account balances, on one plate.'],
     businesstoday: ['Business Today', 'Searchable daily balance sheet and operational breakdown for today or past dates.'],
     pumice: ['Pumice Dashboard', 'Singular accounting for Pumice: sales, purchases, expenses, and M-Pesa cash store.'],
+    reports: ['Reports', 'Weekly or monthly report on one page — print it, save as PDF or email it.'],
     statistics: ['Statistics', 'Track weekly, monthly, and yearly business trends.'],
     purchases: ['Purchases', 'Build multi-item receipts and track stock bought in.'],
     sales: ['Sales', 'Build multi-item receipts and track revenue coming in.'],
@@ -4130,6 +4193,8 @@
     if(section === 'activity') loadActivityLog();
     if(section === 'team') { loadTeam(); loadTeamSettings(); loadLogins(); }
     if(section === 'reconcile') renderReconcile();
+    if(section === 'reports') renderReports();
+    if(section === 'businesstoday') loadDayLock();
     if(section === 'profile') { updateBackupLabel(); loadBackupEmailStatus(); updateInstallUI(); }
   }
 
@@ -4139,6 +4204,40 @@
   function resetBusinessTodayDate(){
     document.getElementById('bt-search-date').value = todayStr();
     renderBusinessToday();
+  }
+
+  // ---- No negative accounts: every payment going out is checked against the balance ----
+  function accBalNow(){ return state.lastAccounts || balancesAsOf('9999-12-31', true); }
+  function checkFunds(needs, what, refund){
+    const bal = accBalNow(), bad = [];
+    Object.keys(needs).forEach(k => {
+      const n = Number(needs[k]) || 0;
+      if (n <= 0 || k === 'credit' || bal[k] === undefined) return;
+      const have = (Number(bal[k]) || 0) + ((refund && Number(refund[k])) || 0);
+      if (n > have + 0.005) bad.push(`${accountLabels[k] || k}: has ${fmt(Math.round(have * 100) / 100)}, needs ${fmt(Math.round(n * 100) / 100)}`);
+    });
+    if (!bad.length) return true;
+    alert('Not enough money for ' + what + '.\n\n' + bad.join('\n') + '\n\nMove money in first (Cash &amp; Transfers), or if the balance in the app is wrong, fix it in Reconcile.'.replace('&amp;', '&'));
+    return false;
+  }
+
+  // ---- Edits/deletes of OLD records must not push an account below zero ----
+  function tmpAssign(rec, upd){ const old = {}; Object.keys(upd).forEach(k => { old[k] = rec[k]; rec[k] = upd[k]; }); return () => Object.assign(rec, old); }
+  function tmpRemove(arrName, pred){
+    const arr = state[arrName], gone = []; 
+    for (let i = arr.length - 1; i >= 0; i--) if (pred(arr[i])) gone.push([i, arr.splice(i, 1)[0]]);
+    return () => { gone.reverse().forEach(([i, x]) => arr.splice(i, 0, x)); };
+  }
+  function negGuard(what, mut){
+    const before = balancesAsOf('9999-12-31', true); let undo;
+    try { undo = mut(); } catch (e) { return true; }
+    const after = balancesAsOf('9999-12-31', true);
+    try { undo && undo(); } catch (e) {}
+    const bad = [];
+    Object.keys(after).forEach(k => { if (after[k] < -0.005 && after[k] < before[k] - 0.005) bad.push(`${accountLabels[k] || k}: would drop from ${fmt(Math.round(before[k] * 100) / 100)} to ${fmt(Math.round(after[k] * 100) / 100)}`); });
+    if (!bad.length) return true;
+    alert('Cannot ' + what + ' — it would leave an account below zero.\n\n' + bad.join('\n') + '\n\nThat money has already been used since. Put money in first (Cash & Transfers), or fix the balance in Reconcile.');
+    return false;
   }
 
   // ---- Cash Till (morning start -> evening deposit) ----
@@ -4163,7 +4262,6 @@
     document.getElementById('bt-deposit').value = Math.max(0, Math.round((now.cash - keep) * 100) / 100) || '';
     btTillPreview();
   }
-  function btTillNow(){ const d = document.getElementById('bt-search-date').value || todayStr(); return balancesAsOf(d, true); }
   let btDone = false;
   function btTillPreview(){
     const el = document.getElementById('bt-till-after'); if (!el) return;
@@ -4183,7 +4281,7 @@
     const to = document.getElementById('bt-dep-to').value;
     if (amt <= 0) { alert('Enter the amount you are depositing.'); return; }
     const now = btTillNow();
-    if (amt > now.cash + 0.01 && !confirm(`You are depositing ${fmt(amt)} but the app expects only ${fmt(now.cash)} cash. Record anyway?`)) return;
+    if (!checkFunds({ cash: amt }, 'this deposit')) return;
     const note = 'Evening cash deposit';
     const btn = document.getElementById('bt-dep-btn'); btn.disabled = true;
     try {
@@ -4197,27 +4295,88 @@
     btDone = true;
     saveStateToStorage(); renderAll();
   }
+  const BT_ACCS = ['cash', 'mpesa', 'pochi', 'moneybox'];
+  function btOpenings(date){ const m = {}; (state.dayOpenings || []).filter(o => o.date === date).forEach(o => { m[o.account] = o; }); return m; }
+  // returns { open, now, calcOpen, saved } : open = morning count if typed, else yesterday's closing
+  function btTillCalc(date){
+    const calcOpen = balancesAsOf(date, false), calcNow = balancesAsOf(date, true), saved = btOpenings(date);
+    const open = {}, now = {};
+    BT_ACCS.forEach(k => { open[k] = saved[k] ? Number(saved[k].amount) || 0 : calcOpen[k]; now[k] = open[k] + (calcNow[k] - calcOpen[k]); });
+    return { open, now, calcOpen, saved };
+  }
+  function btTillNow(){ const d = document.getElementById('bt-search-date').value || todayStr(); return btTillCalc(d).now; }
+  async function btSaveOpenings(){
+    const date = document.getElementById('bt-search-date').value || todayStr();
+    const saved = btOpenings(date); const list = state.dayOpenings || (state.dayOpenings = []);
+    try {
+      for (const k of BT_ACCS) {
+        const v = document.getElementById('bt-open-' + k).value, ex = saved[k];
+        if (v === '') {
+          if (ex) { if (isServerMode()) await apiRequest('/api/day-openings/' + ex.id, { method: 'DELETE' }); state.dayOpenings = state.dayOpenings.filter(o => o.id !== ex.id); }
+          continue;
+        }
+        const amt = Math.round((Number(v) || 0) * 100) / 100;
+        if (amt < 0) { alert('The morning amount cannot be negative.'); return; }
+        if (ex) { if (isServerMode()) await apiRequest('/api/day-openings/' + ex.id, { method: 'PUT', body: JSON.stringify({ amount: amt }) }); ex.amount = amt; }
+        else if (isServerMode()) { const c = await apiRequest('/api/day-openings', { method: 'POST', body: JSON.stringify({ date, account: k, amount: amt }) }); list.push({ id: c.id, date, account: k, amount: c.amount }); }
+        else list.push({ id: nextId(), date, account: k, amount: amt });
+      }
+    } catch (err) { alert('Could not save: ' + (err.message || 'unknown error')); return; }
+    saveStateToStorage(); renderBusinessToday();
+  }
+  async function btClearOpenings(){
+    const date = document.getElementById('bt-search-date').value || todayStr();
+    if (!confirm('Remove the morning count for ' + date + ' and use yesterday\'s closing balances instead?')) return;
+    try { for (const o of (state.dayOpenings || []).filter(x => x.date === date)) if (isServerMode()) await apiRequest('/api/day-openings/' + o.id, { method: 'DELETE' }); }
+    catch (err) { alert('Could not remove: ' + (err.message || 'error')); return; }
+    state.dayOpenings = (state.dayOpenings || []).filter(o => o.date !== date); saveStateToStorage(); renderBusinessToday();
+  }
+  // Adjust the books (balance only, no effect on profit), dated the day BEFORE so today's math stays clean
+  async function btFixBooks(){
+    const date = document.getElementById('bt-search-date').value || todayStr();
+    const c = btTillCalc(date); const diffs = BT_ACCS.filter(k => c.saved[k] && Math.abs(c.open[k] - c.calcOpen[k]) >= 0.005);
+    if (!diffs.length) return;
+    if (!confirm('The books will be changed to match your morning count (balance adjustment only, no effect on net profit):\n\n' + diffs.map(k => accountLabels[k] + ': ' + (c.open[k] - c.calcOpen[k] > 0 ? '+' : '−') + fmt(Math.abs(c.open[k] - c.calcOpen[k]))).join('\n') + '\n\nContinue?')) return;
+    const d = new Date(date + 'T00:00:00'); d.setDate(d.getDate() - 1);
+    const prev = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    try {
+      for (const k of diffs) {
+        const amt = Math.round((c.open[k] - c.calcOpen[k]) * 100) / 100;
+        const r = await apiRequest('/api/cash', { method: 'POST', body: JSON.stringify({ date: prev, source: amt > 0 ? 'Morning count adjustment' : 'Morning count shortfall', account: k, amount: amt, note: 'Balance adjustment to match the count on ' + date + ' (not an expense, no effect on profit)' }) });
+        state.cash.unshift({ id: r.id, source: r.source, account: r.account, amount: r.amount, date: r.date, note: r.note });
+      }
+    } catch (err) { alert('Could not save: ' + (err.message || 'unknown error')); return; }
+    saveStateToStorage(); renderAll();
+  }
   function renderCashTill(targetDate){
-    const open = balancesAsOf(targetDate, false), now = balancesAsOf(targetDate, true);
-    const rows = [['cash', 'Cash'], ['mpesa', 'M-Pesa']];
-    ['pochi', 'moneybox'].forEach(k => { if (Math.abs(open[k]) > 0.004 || Math.abs(now[k]) > 0.004) rows.push([k, accountLabels[k]]); });
+    const { open, now, calcOpen, saved } = btTillCalc(targetDate);
     const f = v => fmt(Math.round(v * 100) / 100);
-    let tO = 0, tN = 0, tI = 0, tU = 0;
-    document.getElementById('bt-till-body').innerHTML = rows.map(([k, lab]) => {
-      const net = now[k] - open[k];
-      tO += open[k]; tN += now[k];
-      return `<tr><td>${lab}</td><td class="num mono">${f(open[k])}</td><td class="num mono ${net >= 0 ? 'green' : 'red'}">${net >= 0 ? '+' : ''}${f(net)}</td><td class="num mono"><strong>${f(now[k])}</strong></td></tr>`;
+    const typed = {}; BT_ACCS.forEach(k => { const el = document.getElementById('bt-open-' + k); if (el && document.activeElement === el) typed[k] = el.value; });
+    let tO = 0, tN = 0;
+    document.getElementById('bt-till-body').innerHTML = BT_ACCS.map(k => {
+      const net = now[k] - open[k]; tO += open[k]; tN += now[k];
+      const val = typed[k] !== undefined ? typed[k] : (saved[k] ? saved[k].amount : '');
+      const diff = saved[k] ? open[k] - calcOpen[k] : 0;
+      return `<tr><td>${accountLabels[k]}</td>
+        <td class="num"><input type="number" step="any" min="0" id="bt-open-${k}" class="price-edit-input" value="${val}" placeholder="${Math.round(calcOpen[k] * 100) / 100}" style="width:110px;">${Math.abs(diff) >= 0.005 ? `<div class="sub" style="color:var(--amber,#f5b942);">yesterday closed ${f(calcOpen[k])} (${diff > 0 ? '+' : '−'}${f(Math.abs(diff))})</div>` : ''}</td>
+        <td class="num mono ${net >= 0 ? 'green' : 'red'}">${net >= 0 ? '+' : ''}${f(net)}</td><td class="num mono"><strong>${f(now[k])}</strong></td></tr>`;
     }).join('') + `<tr class="total-row"><td><strong>Total</strong></td><td class="num mono"><strong>${f(tO)}</strong></td><td class="num mono">${tN - tO >= 0 ? '+' : ''}${f(tN - tO)}</td><td class="num mono"><strong>${f(tN)}</strong></td></tr>`;
+    const hasSaved = Object.keys(saved).length > 0, mism = BT_ACCS.some(k => saved[k] && Math.abs(open[k] - calcOpen[k]) >= 0.005);
+    document.getElementById('bt-open-note').textContent = hasSaved
+      ? (mism ? 'Your morning count is different from what the books had at the end of yesterday (shown in amber). Press "Make the books match" if your count is the truth.' : 'Morning count saved. It matches yesterday\'s closing.')
+      : 'Type what you really have each morning and press Save. Empty boxes use yesterday\'s closing (shown faded). The evening column then updates by itself as you record the day.';
+    document.getElementById('bt-fix-books').style.display = mism ? '' : 'none';
+    document.getElementById('bt-clear-open').style.display = hasSaved ? '' : 'none';
     const keepEl = document.getElementById('bt-keep');
     if (document.activeElement !== keepEl && document.activeElement !== document.getElementById('bt-deposit')) {
-      let saved = ''; try { saved = localStorage.getItem(btKeepKey()) || ''; } catch (e) {}
-      if (!keepEl.value) keepEl.value = saved;
+      let sv = ''; try { sv = localStorage.getItem(btKeepKey()) || ''; } catch (e) {}
+      if (!keepEl.value) keepEl.value = sv;
     }
-    document.getElementById('bt-dep-btn').closest('#bt-till-deposit').style.display = '';
     btTillPreview();
   }
 
   function renderBusinessToday(){
+    renderDayLock();
     const targetDate = document.getElementById('bt-search-date').value || todayStr();
     document.getElementById('bt-date-heading').textContent = `Daily Balance Sheet — ${targetDate}`;
     renderCashTill(targetDate);
@@ -4546,6 +4705,7 @@
         if (!String(spl.name).trim()) { alert('Enter the expense name.'); return; }
         if (!lines.length) { alert('Enter an amount.'); return; }
         if (!/^\d{4}-\d{2}-\d{2}$/.test(spl.date || '')) { alert('Please choose a valid date.'); return; }
+        { const needs = {}; lines.forEach(l => { needs[l.account] = (needs[l.account] || 0) + Number(l.amount); }); const refund = {}; refund[r.account] = Number(r.amount) || 0; if (!checkFunds(needs, 'this change', refund)) return; }
         const btn = document.getElementById('spl-save'); btn.disabled = true;
         const base = { name: String(spl.name).trim(), category: spl.category || 'General', date: spl.date };
         try {
@@ -4587,6 +4747,7 @@
 
   async function deleteCreditSale(creditId) {
     if (!confirm('Are you sure you want to delete this credit loan entry?')) return;
+    if (!negGuard('delete this credit loan (its repayments would be removed)', () => tmpRemove('creditSales', c => c.id === creditId))) return;
     if (isServerMode()) {
       try { await apiRequest('/api/credit-sales/' + creditId, { method: 'DELETE' }); }
       catch (err) { alert('Could not delete on server: ' + (err.message || 'unknown error')); return; }
@@ -4926,6 +5087,7 @@
     const date = document.getElementById('pm-p-date').value || todayStr();
     const qty = Number(document.getElementById('pm-p-qty').value) || 1;
     const price = Number(document.getElementById('pm-p-price').value) || 0;
+    if (!checkFunds({ mpesa: Math.round(qty * price * 100) / 100 + mpFeeRead('ppf', qty * price) }, 'this Pumice purchase')) return;
     const ok = await savePumiceRecord({ date, type: 'purchase', desc, qty, amount: Math.round(qty * price * 100) / 100, item });
     if (!ok) return;
     const fee = mpFeeRead('ppf', qty * price);
@@ -4954,6 +5116,7 @@
       if (amt <= 0) { alert('Enter the amount.'); return; }
       body = { date, type: 'expense', desc, qty: 0, amount: amt, item: '' };
     }
+    if (!withQty && !checkFunds({ mpesa: body.amount + mpFeeRead('pef', body.amount) }, 'this Pumice expense')) return;
     const ok = await savePumiceRecord(body);
     if (!ok) return;
     const fee = withQty ? 0 : mpFeeRead('pef', body.amount);
@@ -4972,6 +5135,7 @@
     const amt = Number(document.getElementById('pm-w-amount').value) || 0;
 
     if (!recipient || amt <= 0) return;
+    if (!checkFunds({ mpesa: amt }, 'this withdrawal')) return;
 
     if (isServerMode()) {
       try {
@@ -5086,6 +5250,7 @@
     const rows = state.pumice.filter(p => p.type === 'sale' && ('pm|' + (p.date || '') + '|' + String(p.desc || '').trim().toLowerCase()) === key);
     if (!rows.length) return;
     if (!confirm('Delete this whole receipt (' + rows.length + ' items)?')) return;
+    if (!negGuard('delete this Pumice receipt', () => tmpRemove('pumice', p => rows.some(r => r.id === p.id)))) return;
     for (const r of rows) {
       if (isServerMode()) {
         try { await apiRequest('/api/pumice/' + r.id, { method: 'DELETE' }); }
@@ -5099,6 +5264,7 @@
 
   async function deletePumice(id){
     if(!confirm('Delete this Pumice record?')) return;
+    if (!negGuard('delete this Pumice record', () => tmpRemove('pumice', p => p.id === id))) return;
     if (isServerMode()) {
       try { await apiRequest('/api/pumice/' + id, { method: 'DELETE' }); }
       catch (err) { alert('Could not delete on server: ' + (err.message || 'unknown error')); return; }
@@ -5258,6 +5424,7 @@
     const owner = document.getElementById('pm-settle-owner').value.trim();
     if (!owner) { alert('Enter the owner name or a batch note.'); return; }
     const date = document.getElementById('pm-settle-date').value || todayStr();
+    if (!checkFunds({ mpesa: Math.max(0, owed) }, 'the final payout to the owner')) return;
     const btn = document.getElementById('pm-settle-go'); btn.disabled = true;
     const ok = await savePumiceRecord({ date, type: 'withdrawal', desc: PM_SETTLE_PREFIX + ' — ' + owner, qty: 1, amount: Math.max(0, owed), item: '' });
     btn.disabled = false;
@@ -5999,6 +6166,13 @@
     const items = state.stagedPurchaseItems.slice();
     const receiptId = newReceiptId();
     const feeAmt = mpFeeRead('pf', purchaseMpesaBase());
+    {
+      const needs = {};
+      if (document.getElementById('p-split-toggle') && document.getElementById('p-split-toggle').checked) { const a0 = readSplit('p-split-', P_SPLIT_FIELDS); P_SPLIT_FIELDS.forEach(f => { needs[f] = a0[f]; }); }
+      else needs[account] = purchaseReceiptTotal();
+      needs.mpesa = (needs.mpesa || 0) + feeAmt;
+      if (!checkFunds(needs, 'this purchase')) return;
+    }
 
     if (document.getElementById('p-split-toggle') && document.getElementById('p-split-toggle').checked) {
       const total = purchaseReceiptTotal();
@@ -6028,7 +6202,7 @@
         return;
       }
       try { await mpPostGeneralFee(date, supplier, feeAmt); } catch (err) { alert('Purchase saved, but the M-Pesa charge could not be saved: ' + (err.message || 'error')); }
-      state.stagedPurchaseItems = [];
+      state.stagedPurchaseItems = []; { const sb = document.getElementById('p-supplier'); if (sb) sb.value = ''; }
       renderStagedPurchaseReceipt();
       resetPurchaseSplitPanel();
       mpFeeReset('pf');
@@ -6058,7 +6232,7 @@
     }
 
     try { await mpPostGeneralFee(date, supplier, feeAmt); } catch (err) { alert('Purchase saved, but the M-Pesa charge could not be saved: ' + (err.message || 'error')); }
-    state.stagedPurchaseItems = [];
+    state.stagedPurchaseItems = []; { const sb = document.getElementById('p-supplier'); if (sb) sb.value = ''; }
     renderStagedPurchaseReceipt();
     mpFeeReset('pf');
     saveStateToStorage();
@@ -6077,7 +6251,7 @@
       const raw = localStorage.getItem(DRAFT_SALES_KEY);
       state.stagedSalesItems = raw ? JSON.parse(raw) : [];
     } catch(e){
-      state.stagedSalesItems = [];
+      state.stagedSalesItems = []; { const cb = document.getElementById('s-customer'); if (cb) cb.value = ''; }
     }
   }
 
@@ -6225,7 +6399,7 @@
         return;
       }
       const committed = items.map(it => ({ item: it.item, qty: it.qty, price: it.price, total: it.qty * it.price }));
-      state.stagedSalesItems = [];
+      state.stagedSalesItems = []; { const cb = document.getElementById('s-customer'); if (cb) cb.value = ''; }
       renderStagedSalesReceipt();
       saveDraftSalesItems();
       resetSalesSplitPanel();
@@ -6268,7 +6442,7 @@
         });
       }
 
-      state.stagedSalesItems = [];
+      state.stagedSalesItems = []; { const cb = document.getElementById('s-customer'); if (cb) cb.value = ''; }
       renderStagedSalesReceipt();
       saveDraftSalesItems();
       saveStateToStorage();
@@ -6300,7 +6474,7 @@
         });
       }
 
-      state.stagedSalesItems = [];
+      state.stagedSalesItems = []; { const cb = document.getElementById('s-customer'); if (cb) cb.value = ''; }
       renderStagedSalesReceipt();
       saveDraftSalesItems();
       saveStateToStorage();
@@ -6448,6 +6622,27 @@
 </html>`;
   }
 
+  function receiptText(d) {
+    const total = d.items.reduce((t, it) => t + it.total, 0);
+    const lines = d.items.map(it => `• ${it.item} — ${it.qty} × ${fmt(it.price)} = ${fmt(it.total)}`);
+    return [`*${receiptBusinessName()}*`, `Receipt ${receiptNumber(d.receiptId)} · ${d.date}`, `Customer: ${d.customer || 'Walk-in'}`, '', ...lines, '', `*TOTAL: ${fmt(total)}*`,
+      ...((d.splitBreakdown && d.splitBreakdown.length) ? d.splitBreakdown.map(p => `Paid via ${p.label}: ${fmt(p.amount)}`) : []), '', 'Thank you for your business!'].join('\n');
+  }
+  function whatsappReceipt() {
+    if (!currentReceiptData) return;
+    const ph = prompt('Customer phone number (e.g. 0712345678) — or leave empty to choose the chat in WhatsApp:', '');
+    if (ph === null) return;
+    let n = (ph || '').replace(/[^0-9]/g, '');
+    if (n.startsWith('0')) n = '254' + n.slice(1); else if (n.length === 9) n = '254' + n;
+    window.open('https://wa.me/' + n + '?text=' + encodeURIComponent(receiptText(currentReceiptData)), '_blank', 'noopener');
+  }
+  async function shareReceipt() {
+    if (!currentReceiptData) return;
+    const text = receiptText(currentReceiptData);
+    if (navigator.share) { try { await navigator.share({ title: 'Receipt ' + receiptNumber(currentReceiptData.receiptId), text }); return; } catch (e) { if (e && e.name === 'AbortError') return; } }
+    try { await navigator.clipboard.writeText(text); alert('Receipt text copied. Paste it in any chat or message.'); } catch (e) { prompt('Copy the receipt text:', text); }
+  }
+
   function printReceipt() {
     if (!currentReceiptData) return;
     const html = buildStandaloneReceiptHTML(currentReceiptData);
@@ -6502,6 +6697,7 @@
     }
 
     if (Object.keys(updates).length === 0) return;
+    if (!negGuard('save this change', () => tmpAssign(record, updates))) return;
 
     if (isServerMode()) {
       try {
@@ -6606,6 +6802,7 @@
         body.cash_part = cp;
       }
       if (!body.desc && r.type !== 'expense') { alert('Please fill in the name/description.'); return; }
+      if (!negGuard('save this change', () => tmpAssign(r, body))) return;
       try {
         if (isServerMode()) await apiRequest('/api/pumice/' + id, { method: 'PUT', body: JSON.stringify(body) });
         Object.assign(r, body);
@@ -6616,6 +6813,7 @@
 
   async function deleteSale(id) {
     if (!confirm('Delete this sale record?')) return;
+    if (!negGuard('delete this sale', () => tmpRemove('sales', x => x.id === id))) return;
     if (isServerMode()) {
       try { await apiRequest('/api/sales/' + id, { method: 'DELETE' }); }
       catch (err) { alert('Could not delete on server: ' + (err.message || 'unknown error')); return; }
@@ -6909,7 +7107,7 @@
         <button class="row-del" onclick="deleteReconciliation(${r.id})">✕</button></td></tr>`).join('')
       : '<tr class="empty-row"><td colspan="8">No counts saved yet.</td></tr>';
   }
-  async function saveReconciliation() {
+  async function saveReconciliation(matchNow) {
     rcMsg('', true);
     const exp = state.lastAccounts || {};
     const note = document.getElementById('rc-note').value.trim();
@@ -6922,16 +7120,22 @@
       toSave.push({ date: todayStr(), account: a, expected, counted, difference: Math.round((counted - expected) * 100) / 100, note, checked_by: who, adjusted: false });
     });
     if (!toSave.length) { rcMsg('Type in at least one counted amount first.', false); return; }
+    if (toSave.some(r => r.counted < 0)) { rcMsg('A counted amount cannot be negative.', false); return; }
+    if (matchNow) {
+      const diffs = toSave.filter(r => Math.abs(r.difference) >= 0.005);
+      if (diffs.length && !confirm('The app will be changed to match your count:\n\n' + diffs.map(r => (accountLabels[r.account] || r.account) + ': ' + (r.difference > 0 ? '+' : '−') + fmt(Math.abs(r.difference)) + (r.difference > 0 ? ' (balance adjustment, no effect on profit)' : ' (balance adjustment, no effect on profit)')).join('\n') + '\n\nContinue?')) return;
+    }
     try {
       for (const body of toSave) {
         const c = await apiRequest('/api/reconciliations', { method: 'POST', body: JSON.stringify(body) });
         state.reconciliations.unshift({ ...body, id: c.id });
+        if (matchNow && Math.abs(body.difference) >= 0.005) await adjustFromReconciliation(c.id, true);
       }
       RC_ACCOUNTS.forEach(a => { document.getElementById('rc-in-' + a).value = ''; });
       document.getElementById('rc-note').value = '';
       renderReconcile();
       const off = toSave.filter(r => Math.abs(r.difference) >= 0.005).length;
-      rcMsg(off ? `Saved. ${off} account(s) do not match — see Past counts below.` : 'Saved. Everything matches.', true);
+      rcMsg(matchNow ? (off ? 'Saved and fixed: the app balances now match your count.' : 'Saved. Everything already matched.') : (off ? `Saved. ${off} account(s) do not match — see Past counts below.` : 'Saved. Everything matches.'), true);
     } catch (err) { rcMsg('Could not save: ' + (err.message || 'unknown error'), false); }
   }
   async function deleteReconciliation(id) {
@@ -6939,26 +7143,26 @@
     try { await apiRequest('/api/reconciliations/' + id, { method: 'DELETE' }); } catch (err) { rcMsg('Could not delete: ' + (err.message || ''), false); return; }
     state.reconciliations = state.reconciliations.filter(r => r.id !== id); renderReconcile();
   }
-  async function adjustFromReconciliation(id) {
+  async function adjustFromReconciliation(id, skipConfirm) {
     const r = state.reconciliations.find(x => x.id === id); if (!r) return;
     const d = Number(r.difference), label = accountLabels[r.account] || r.account;
     const msg = d > 0
       ? `${label} had ${fmt(d)} MORE than the app expected.\n\nThis will add a cash entry of ${fmt(d)} to ${label} (source "Reconciliation adjustment") so the app matches. Continue?`
-      : `${label} was ${fmt(-d)} SHORT of what the app expected.\n\nThis will add an expense of ${fmt(-d)} from ${label} ("Reconciliation shortfall"), which also lowers your profit. Continue?`;
-    if (!confirm(msg)) return;
+      : `${label} was ${fmt(-d)} SHORT of what the app expected.\n\nThis will take ${fmt(-d)} off ${label} as a balance adjustment ("Reconciliation shortfall"). It does NOT change your net profit, so you can record the real expenses later. Continue?`;
+    if (!skipConfirm && !confirm(msg)) return;
     const date = todayStr();
     try {
       if (d > 0) {
         const c = await apiRequest('/api/cash', { method: 'POST', body: JSON.stringify({ date, source: 'Reconciliation adjustment', account: r.account, amount: d, note: 'From count of ' + r.date }) });
         state.cash.unshift({ id: c.id, source: c.source, account: c.account, amount: c.amount, date: c.date, note: c.note });
       } else {
-        const c = await apiRequest('/api/expenses', { method: 'POST', body: JSON.stringify({ date, name: 'Reconciliation shortfall', category: 'General', amount: -d, account: r.account }) });
-        state.expenses.unshift({ id: c.id, name: c.name, amount: c.amount, date: c.date, category: c.category, account: c.account });
+        const c = await apiRequest('/api/cash', { method: 'POST', body: JSON.stringify({ date, source: 'Reconciliation shortfall', account: r.account, amount: d, note: 'Balance adjustment from count of ' + r.date + ' (not an expense, no effect on profit)' }) });
+        state.cash.unshift({ id: c.id, source: c.source, account: c.account, amount: c.amount, date: c.date, note: c.note });
       }
       await apiRequest('/api/reconciliations/' + id, { method: 'PUT', body: JSON.stringify({ adjusted: true }) });
       r.adjusted = true;
       renderAll();
-      rcMsg('Adjusted. The app balance for ' + label + ' now matches your count.', true);
+      rcMsg(skipConfirm ? 'Saved. The app balances now match your count.' : 'Adjusted. The app balance for ' + label + ' now matches your count.', true);
     } catch (err) { rcMsg('Could not adjust: ' + (err.message || 'unknown error'), false); }
   }
 
@@ -7027,9 +7231,152 @@
     try { await apiRequest('/api/team/settings', { method: 'PUT', body: JSON.stringify({ staff_can_delete: !!on }) }); teamMsg(on ? 'Staff can delete records.' : 'Only you can delete records now.', true); }
     catch (err) { teamMsg(err.message || 'Could not save.', false); loadTeamSettings(); }
   }
+  async function saveStaffEdit(on) {
+    try { await apiRequest('/api/team/settings', { method: 'PUT', body: JSON.stringify({ staff_can_edit: !!on }) }); teamMsg(on ? 'Staff can edit records.' : 'Only you can edit records now (staff can still add).', true); }
+    catch (err) { teamMsg(err.message || 'Could not save.', false); loadTeamSettings(); }
+  }
+  async function saveAutoReports(on) {
+    try { await apiRequest('/api/team/settings', { method: 'PUT', body: JSON.stringify({ auto_reports: !!on }) }); teamMsg(on ? 'Automatic reports are on.' : 'Automatic reports are off.', true); }
+    catch (err) { teamMsg(err.message || 'Could not save.', false); loadTeamSettings(); }
+  }
   async function loadTeamSettings() {
     const cb = document.getElementById('staff-can-delete'); if (!cb || !(state.currentUser && state.currentUser.isOwner)) return;
-    try { const st = await apiRequest('/api/team/settings'); cb.checked = !!st.staff_can_delete; } catch (e) {}
+    try { const st = await apiRequest('/api/team/settings'); cb.checked = !!st.staff_can_delete; const ce = document.getElementById('staff-can-edit'); if (ce) ce.checked = st.staff_can_edit !== false; const ar = document.getElementById('auto-reports'); if (ar) ar.checked = st.auto_reports !== false; } catch (e) {}
+  }
+
+  // ---- Closed days ----
+  async function loadDayLock(){
+    if (!isServerMode()) return;
+    try { const r = await apiRequest('/api/day-lock'); state.lockedUntil = r.locked_until || ''; } catch (e) {}
+    renderDayLock();
+  }
+  function renderDayLock(){
+    const el = document.getElementById('bt-lock-card'); if (!el) return;
+    if (!isServerMode()) { el.style.display = 'none'; return; }
+    el.style.display = '';
+    const owner = !!(state.currentUser && state.currentUser.isOwner);
+    const lu = state.lockedUntil || '';
+    const date = (document.getElementById('bt-search-date') || {}).value || todayStr();
+    el.innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;">
+      <div>${lu ? '🔒 <b>Books closed up to ' + reEsc(lu) + '</b><div class="sub">Records on or before this day can’t be added, changed or deleted' + (owner ? ' without a reason.' : ' — ask the owner.') + ' Credit repayments are still allowed.</div>' : '🔓 <b>No day is closed yet</b><div class="sub">Close a day when its money is counted so nobody can change it by mistake.</div>'}</div>
+      ${owner ? `<div style="display:flex;gap:8px;flex-wrap:wrap;"><button class="btn btn-small" onclick="closeDayNow()">🔒 Close up to ${reEsc(date)}</button>${lu ? '<button class="btn btn-secondary btn-small" onclick="reopenDay()">Reopen…</button>' : ''}</div>` : ''}
+    </div>`;
+  }
+  async function closeDayNow(){
+    const date = document.getElementById('bt-search-date').value || todayStr();
+    if (state.lockedUntil && date <= state.lockedUntil) { alert('That day is already closed (up to ' + state.lockedUntil + ').'); return; }
+    if (!confirm('Close the books up to ' + date + '?\n\nNobody will be able to add, change or delete records dated on or before ' + date + ' unless you (the owner) give a reason.')) return;
+    try { const r = await apiRequest('/api/day-lock', { method: 'POST', body: JSON.stringify({ locked_until: date }) }); state.lockedUntil = r.locked_until; renderDayLock(); }
+    catch (err) { alert(err.message || 'Could not close the day.'); }
+  }
+  async function reopenDay(){
+    const v = prompt('Reopen days after which date? (leave as is to open everything after that date)\nType the new "closed up to" date (YYYY-MM-DD), or leave empty to open everything:', '');
+    if (v === null) return;
+    const nd = v.trim();
+    if (nd && !/^\d{4}-\d{2}-\d{2}$/.test(nd)) { alert('Please type a date like 2026-11-20.'); return; }
+    const why = prompt('Reason for reopening (saved in the activity log):', '');
+    if (!why || why.trim().length < 3) { alert('A reason is needed.'); return; }
+    try { const r = await apiRequest('/api/day-lock', { method: 'POST', body: JSON.stringify({ locked_until: nd, reason: why.trim() }) }); state.lockedUntil = r.locked_until; renderDayLock(); }
+    catch (err) { alert(err.message || 'Could not reopen.'); }
+  }
+
+  // ---- Reports ----
+  function rpIso(x){ return x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0'); }
+  function rpRange(kind){
+    const t = todayStr(), d = new Date(t + 'T00:00:00'), dow = (d.getDay() + 6) % 7;
+    if (kind === 'week') { const a = new Date(d); a.setDate(d.getDate() - dow); return [rpIso(a), t]; }
+    if (kind === 'lastweek') { const a = new Date(d); a.setDate(d.getDate() - dow - 7); const b = new Date(a); b.setDate(a.getDate() + 6); return [rpIso(a), rpIso(b)]; }
+    if (kind === 'month') return [rpIso(new Date(d.getFullYear(), d.getMonth(), 1)), t];
+    if (kind === 'lastmonth') return [rpIso(new Date(d.getFullYear(), d.getMonth() - 1, 1)), rpIso(new Date(d.getFullYear(), d.getMonth(), 0))];
+    return null;
+  }
+  function rpData(from, to){
+    const inR = d => d && d >= from && d <= to;
+    const sales = state.sales.filter(x => inR(x.date)), purch = state.purchases.filter(x => inR(x.date)), exps = state.expenses.filter(x => inR(x.date));
+    const sum = (a, f) => a.reduce((t, x) => t + (Number(f(x)) || 0), 0);
+    const totSales = sum(sales, x => x.qty * x.price), totPurch = sum(purch, x => x.qty * x.cost), totExp = sum(exps, x => x.amount);
+    const charges = sum(exps.filter(e => /m-?pesa charge/i.test((e.category || '') + ' ' + (e.name || ''))), x => x.amount);
+    const pmCharges = sum(state.pumice.filter(p => inR(p.date) && p.type === 'expense' && /m-?pesa charge/i.test(p.desc || '')), x => x.amount);
+    const given = state.creditSales.filter(c => inR(c.date)), givenTot = sum(given, c => c.total);
+    let repaid = 0; state.creditSales.forEach(c => (c.payments || []).forEach(p => { if (inR(p.date)) repaid += Number(p.amount) || 0; }));
+    const owedNow = sum(state.creditSales, c => c.remaining);
+    const owedBy = {}; state.creditSales.forEach(c => { if (Number(c.remaining) > 0) owedBy[c.customer || 'Unknown'] = (owedBy[c.customer || 'Unknown'] || 0) + Number(c.remaining); });
+    const topOwed = Object.entries(owedBy).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const byCat = {}; exps.forEach(e => { const k = e.category || 'Other'; byCat[k] = (byCat[k] || 0) + (Number(e.amount) || 0); });
+    const topCat = Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    const byItem = {}; sales.forEach(x => { byItem[x.item] = (byItem[x.item] || 0) + x.qty * x.price; });
+    const topItems = Object.entries(byItem).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const pm = state.pumice.filter(p => inR(p.date));
+    const pmSales = sum(pm.filter(p => p.type === 'sale'), p => p.amount), pmExp = sum(pm.filter(p => p.type === 'expense' && !isPumiceWriteOff(p)), p => p.amount) + sum(pm.filter(p => p.type === 'purchase'), p => p.amount);
+    const pmPaid = sum(pm.filter(p => p.type === 'withdrawal'), p => p.amount);
+    const pmOwed = pmTotals(state.pumice.filter(p => p.id > pmCycleStartId())).owed;
+    const bal = balancesAsOf('9999-12-31', true);
+    return { from, to, totSales, totPurch, totExp, charges, pmCharges, givenTot, givenN: given.length, repaid, owedNow, topOwed, topCat, topItems, net: totSales - totPurch - totExp, pmSales, pmExp, pmPaid, pmOwed, bal, nSales: sales.length };
+  }
+  function rpHtml(from, to){
+    const r = rpData(from, to), f = v => fmt(Math.round(v * 100) / 100);
+    const biz = (state.currentUser && state.currentUser.business) || 'K-Ray Enterprise';
+    const th = 'text-align:left;padding:6px 8px;background:#f3f4f6;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:#374151;';
+    const td = 'padding:7px 8px;border-bottom:1px solid #e5e7eb;font-size:14px;color:#111827;', tr = td + 'text-align:right;font-weight:600;white-space:nowrap;';
+    const row = (a, b, bold) => `<tr><td style="${td}${bold ? 'font-weight:700;' : ''}">${a}</td><td style="${tr}">${b}</td></tr>`;
+    const head = t => `<tr><th colspan="2" style="${th}">${t}</th></tr>`;
+    const list = a => a.length ? a.map(([k, v]) => row(reEsc(String(k)), f(v))).join('') : row('<i style="color:#6b7280;">none</i>', '');
+    const col = r.net >= 0 ? '#047857' : '#b91c1c';
+    return `<div style="font-family:Arial,Helvetica,sans-serif;max-width:640px;margin:0 auto;color:#111827;">
+      <div style="text-align:center;margin-bottom:12px;"><div style="font-size:20px;font-weight:800;">${reEsc(biz)}</div><div style="font-size:13px;color:#4b5563;">Business report · ${reEsc(from)} to ${reEsc(to)}</div></div>
+      <table style="width:100%;border-collapse:collapse;">
+        ${head('Money in &amp; out')}
+        ${row('Sales (' + r.nSales + ' items)', f(r.totSales))}
+        ${row('Purchases (stock bought)', f(r.totPurch))}
+        ${row('Expenses', f(r.totExp))}
+        ${row('&nbsp;&nbsp;of which M-Pesa charges', f(r.charges + 0))}
+        ${row('Net profit', '<span style="color:' + col + ';">' + f(r.net) + '</span>', true)}
+        ${head('Credit loans')}
+        ${row('Given on credit in this period (' + r.givenN + ')', f(r.givenTot))}
+        ${row('Repayments received in this period', f(r.repaid))}
+        ${row('Total still owed to you now', f(r.owedNow), true)}
+        ${r.topOwed.length ? head('Biggest debtors') + list(r.topOwed) : ''}
+        ${head('Pumice (family stock you sell for others)')}
+        ${row('Pumice sales', f(r.pmSales))}
+        ${row('Pumice expenses &amp; purchases', f(r.pmExp))}
+        ${row('&nbsp;&nbsp;of which M-Pesa charges', f(r.pmCharges))}
+        ${row('Already paid out in this period', f(r.pmPaid))}
+        ${row('Owed to the Pumice owner now (current batch)', f(r.pmOwed), true)}
+        ${head('Where the money is now')}
+        ${row('Cash', f(r.bal.cash))}${row('M-Pesa', f(r.bal.mpesa))}${row('Pochi', f(r.bal.pochi))}${row('Money box', f(r.bal.moneybox))}
+        ${head('Top selling items')}${list(r.topItems)}
+        ${head('Biggest expense groups')}${list(r.topCat)}
+      </table>
+      <div style="text-align:center;font-size:11px;color:#6b7280;margin-top:12px;">Made ${reEsc(todayStr())} · ${reEsc(biz)}</div></div>`;
+  }
+  function rpCurrent(){
+    const kind = document.getElementById('rp-kind').value;
+    let from = document.getElementById('rp-from').value, to = document.getElementById('rp-to').value;
+    if (kind !== 'custom') { const r = rpRange(kind); from = r[0]; to = r[1]; document.getElementById('rp-from').value = from; document.getElementById('rp-to').value = to; }
+    if (!from || !to) { from = from || to || todayStr(); to = to || from; }
+    if (from > to) { const t = from; from = to; to = t; }
+    return [from, to];
+  }
+  function renderReports(){
+    const el = document.getElementById('rp-body'); if (!el) return;
+    const [from, to] = rpCurrent();
+    el.innerHTML = rpHtml(from, to);
+  }
+  function rpPrint(){
+    const [from, to] = rpCurrent();
+    const w = window.open('', '_blank');
+    if (!w) { document.getElementById('rp-msg').textContent = 'Your browser blocked the print window. Allow pop-ups for this site and try again.'; return; }
+    w.document.write('<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Report ' + from + ' to ' + to + '</title><style>@page{margin:12mm;}body{margin:12px;}</style></head><body>' + rpHtml(from, to) + '</body></html>');
+    w.document.close(); w.focus(); setTimeout(() => { try { w.print(); } catch (e) {} }, 400);
+  }
+  async function rpEmail(){
+    const msg = document.getElementById('rp-msg'); const [from, to] = rpCurrent();
+    if (!isServerMode()) { msg.textContent = 'Emailing needs the online (server) version of the app.'; return; }
+    msg.textContent = 'Sending…';
+    try {
+      const r = await apiRequest('/api/report/email', { method: 'POST', body: JSON.stringify({ subject: 'Business report ' + from + ' to ' + to, html: '<div style="padding:12px;">' + rpHtml(from, to) + '</div>', text: 'Business report ' + from + ' to ' + to }) });
+      msg.textContent = '✅ Sent to ' + r.sent_to + '. Check your inbox (and spam).';
+    } catch (err) { msg.textContent = '❌ ' + (err.message || 'Could not send.'); }
   }
 
   async function inviteTeamMember(e) {
@@ -7214,6 +7561,17 @@
     const whoKey = kind === 'p' ? 'supplier' : 'customer';
     const btn = document.getElementById('re-save-btn'); btn.disabled = true;
     const receiptId = e.receiptId || newReceiptId();
+    if (!negGuard('save this receipt', () => {
+      const undos = [], added = [];
+      e.rows.forEach(r => {
+        if (r.isNew && r.removed) return;
+        if (r.removed) { undos.push(tmpRemove(kind === 'p' ? 'purchases' : 'sales', x => x.id === r.id)); return; }
+        const f = { item: String(r.item).trim(), qty: Number(r.qty), [uk]: Number(r.unit), account: r.account, date: e.date || todayStr() };
+        if (r.isNew) { const t = Object.assign({ id: -Math.random() }, f); arr.push(t); added.push(t); }
+        else { const rec = arr.find(x => x.id === r.id); if (rec) undos.push(tmpAssign(rec, f)); }
+      });
+      return () => { undos.reverse().forEach(u => u()); added.forEach(t => { const i = arr.indexOf(t); if (i >= 0) arr.splice(i, 1); }); };
+    })) { btn.disabled = false; return; }
     try {
       for (const r of e.rows) {
         if (r.isNew && r.removed) continue;
@@ -7261,6 +7619,7 @@
     const rows = arr.filter(r => receiptKey(kind, r) === key);
     if (!rows.length) return;
     if (!confirm(`Delete this whole receipt (${rows.length} records)?`)) return;
+    if (!negGuard('delete this receipt', () => tmpRemove(kind === 'p' ? 'purchases' : 'sales', x => rows.some(r => r.id === x.id)))) return;
     const url = kind === 'p' ? '/api/purchases/' : '/api/sales/';
     if (isServerMode()) {
       try { for (const r of rows) await apiRequest(url + r.id, { method: 'DELETE' }); }
@@ -7482,6 +7841,32 @@
     expReceiptData = ''; const i = document.getElementById('e-receipt'); if(i) i.value = '';
     document.getElementById('e-receipt-thumb').style.display = 'none'; document.getElementById('e-receipt-clear').style.display = 'none';
   }
+  function addExpenseReceipt(id){
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
+    inp.onchange = () => {
+      const f = inp.files && inp.files[0]; if (!f) return;
+      const rd = new FileReader();
+      rd.onload = () => {
+        const im = new Image();
+        im.onload = async () => {
+          const max = 1100, sc = Math.min(1, max / Math.max(im.width, im.height));
+          const c = document.createElement('canvas'); c.width = Math.round(im.width * sc); c.height = Math.round(im.height * sc);
+          c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+          const data = c.toDataURL('image/jpeg', 0.6);
+          const ex = state.expenses.find(x => x.id === id); if (!ex) return;
+          try {
+            if (isServerMode()) { await apiRequest('/api/expenses/' + id, { method: 'PUT', body: JSON.stringify({ receipt_img: data }) }); ex.has_receipt_img = true; delete ex.receipt_img; }
+            else ex.receipt_img = data;
+            saveStateToStorage(); renderAll(); alert('Receipt photo saved.');
+          } catch (err) { alert('Could not save the photo: ' + (err.message || 'error')); }
+        };
+        im.onerror = () => alert('Could not read that photo. Try another.');
+        im.src = rd.result;
+      };
+      rd.readAsDataURL(f);
+    };
+    inp.click();
+  }
   async function viewExpenseReceipt(id){
     const ex = state.expenses.find(x => x.id === id); if(!ex) return;
     let src = ex.receipt_img || '';
@@ -7527,6 +7912,13 @@
     }
 
     const feeAmtE = mpFeeRead('ef', expMpesaBase());
+    if (payload.account !== 'writeoff') {
+      const needs = {};
+      if (payload.splitLines) payload.splitLines.forEach(l => { needs[l.account] = (needs[l.account] || 0) + l.amount; });
+      else needs[payload.account] = payload.amount;
+      needs.mpesa = (needs.mpesa || 0) + feeAmtE;
+      if (!checkFunds(needs, 'this expense')) return;
+    }
     const parts = payload.splitLines
       ? payload.splitLines.map((l, i) => Object.assign({}, payload, { amount: l.amount, account: l.account, qty: i === 0 ? payload.qty : 0, receipt_img: i === 0 ? payload.receipt_img : undefined, splitLines: undefined }))
       : [payload];
@@ -7564,6 +7956,7 @@
     const name = document.getElementById('pf-e-name').value.trim();
     const amt = Number(document.getElementById('pf-e-amount').value) || 0;
     if(!name || amt <= 0) return;
+    if (!checkFunds({ cash: amt }, 'this expense')) return;
 
     const date = todayStr();
     if (isServerMode()) {
@@ -7657,7 +8050,7 @@
         <td>${accountLabels[e.account || 'cash'] || e.account}</td>
         <td class="num mono">${e.item ? reEsc(e.item) + ' × ' + e.qty : (Number(e.qty) > 0 ? '× ' + e.qty : '—')}</td>
         <td class="num mono red">${fmt(e.amount)}</td>
-        <td style="text-align:center;"><button class="row-edit" onclick="editExpense(${e.id})" title="Edit">✏</button><button class="row-del" onclick="deleteExpense(${e.id})">✕</button></td>
+        <td style="text-align:center;"><button class="row-edit" onclick="addExpenseReceipt(${e.id})" title="${(e.has_receipt_img || e.receipt_img) ? 'Replace' : 'Add'} receipt photo">📷</button><button class="row-edit" onclick="editExpense(${e.id})" title="Edit">✏</button><button class="row-del" onclick="deleteExpense(${e.id})">✕</button></td>
       </tr>
     `).join('');
   }
@@ -7700,6 +8093,7 @@
 
   async function deleteCash(id){
     if(!confirm('Delete this cash injection entry?')) return;
+    if (!negGuard('delete this cash entry', () => tmpRemove('cash', c => c.id === id))) return;
     if (isServerMode()) {
       try { await apiRequest('/api/cash/' + id, { method: 'DELETE' }); }
       catch (err) { alert('Could not delete on server: ' + (err.message || 'unknown error')); return; }
@@ -7722,6 +8116,7 @@
       return;
     }
     if(amt <= 0) return;
+    if (!checkFunds({ [from]: amt }, 'this transfer')) return;
 
     if (isServerMode()) {
       try {
@@ -7747,6 +8142,7 @@
 
   async function deleteTransfer(id){
     if(!confirm('Delete this account transfer?')) return;
+    if (!negGuard('delete this transfer', () => tmpRemove('transfers', t => t.id === id))) return;
     if (isServerMode()) {
       try { await apiRequest('/api/transfers/' + id, { method: 'DELETE' }); }
       catch (err) { alert('Could not delete on server: ' + (err.message || 'unknown error')); return; }
@@ -7995,25 +8391,26 @@
     const norm = n => String(n || '').toLowerCase().replace(/\s+/g, ' ').trim();
     const isWalkIn = n => { const k = norm(n); return !k || k === 'walk in' || k === 'walk-in' || k === 'walkin'; };
     const map = new Map();
-    const get = (name) => { const k = norm(name); if (!map.has(k)) map.set(k, { name: String(name).trim(), spent: 0, orders: new Set(), last: '', owes: 0 }); return map.get(k); };
-    const addRec = (name, date, amount, receiptId, id) => {
+    const get = (name) => { const k = norm(name); if (!map.has(k)) map.set(k, { name: String(name).trim(), spent: 0, paid: 0, orders: new Set(), last: '', owes: 0 }); return map.get(k); };
+    const addRec = (name, date, amount, receiptId, id, paidAmt) => {
       if (isWalkIn(name)) return;
       const c = get(name);
       if (!c.last || date > c.last) c.last = date;       // last purchase uses ALL history
-      if (!fromStr || date >= fromStr) { c.spent += amount; c.orders.add((receiptId || 'i' + id) + '|' + date); }
+      if (!fromStr || date >= fromStr) { c.spent += amount; c.paid += (paidAmt === undefined ? amount : paidAmt); c.orders.add((receiptId || 'i' + id) + '|' + date); }
     };
     state.sales.forEach(r => addRec(r.customer, r.date || '', r.qty * r.price, r.receiptId, r.id));
-    state.creditSales.forEach(r => { addRec(r.customer, r.date || '', Number(r.total || 0), r.receiptId, 'c' + r.id); if (!isWalkIn(r.customer)) get(r.customer).owes += Number(r.remaining || 0); });
+    state.creditSales.forEach(r => { addRec(r.customer, r.date || '', Number(r.total || 0), r.receiptId, 'c' + r.id, Number(r.paid || 0)); if (!isWalkIn(r.customer)) get(r.customer).owes += Number(r.remaining || 0); });
 
     let list = [...map.values()].filter(c => c.orders.size > 0 || filt !== 'all');
-    list.forEach(c => { c.daysAgo = c.last ? Math.floor((today - new Date(c.last)) / dayMs) : null; });
+    list.forEach(c => { c.daysAgo = c.last ? Math.max(0, Math.round((today - new Date(c.last + 'T00:00:00')) / dayMs)) : null; });
     if (filt === 'inactive') list = list.filter(c => c.daysAgo !== null && c.daysAgo >= 30);
     if (filt === 'owing') list = list.filter(c => c.owes > 0.005);
     if (q) list = list.filter(c => c.name.toLowerCase().includes(q));
-    list.sort((a, b) => (filt === 'inactive') ? b.daysAgo - a.daysAgo : b.spent - a.spent);
+    const byPaid = (document.getElementById('st-cust-rank') || {}).value === 'paid';
+    list.sort((a, b) => (filt === 'inactive') ? b.daysAgo - a.daysAgo : (byPaid ? b.paid - a.paid : b.spent - a.spent));
 
     window._custList = list.slice(0, 100);
-    if (!list.length) { body.innerHTML = '<tr class="empty-row"><td colspan="7">No customers match.</td></tr>'; renderCustomerMessenger(); return; }
+    if (!list.length) { body.innerHTML = '<tr class="empty-row"><td colspan="8">No customers match.</td></tr>'; renderCustomerMessenger(); return; }
     body.innerHTML = list.slice(0, 100).map((c, i) => {
       const stale = c.daysAgo !== null && c.daysAgo >= 30;
       const lastTxt = c.last ? `${c.last}<div class="sub" style="${stale ? 'color:var(--amber,#f5b942);' : ''}">${c.daysAgo === 0 ? 'today' : c.daysAgo + ' day' + (c.daysAgo === 1 ? '' : 's') + ' ago'}${stale ? ' · inactive' : ''}</div>` : '—';
@@ -8022,7 +8419,8 @@
         <td><strong>${reEsc(c.name)}</strong></td>
         <td style="white-space:nowrap;">${customerPhoneCell(c.name, i)}</td>
         <td class="num mono">${c.orders.size}</td>
-        <td class="num mono green">${fmt(c.spent)}</td>
+        <td class="num mono">${fmt(c.spent)}</td>
+        <td class="num mono green">${fmt(c.paid)}</td>
         <td>${lastTxt}</td>
         <td class="num mono ${c.owes > 0.005 ? 'red' : ''}">${c.owes > 0.005 ? fmt(c.owes) : '—'}</td>
       </tr>`;
