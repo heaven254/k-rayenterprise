@@ -131,7 +131,9 @@ def set_summary(user_id):
 @bp.get("/settings")
 @login_required
 def get_settings():
-    return jsonify({"staff_can_delete": get_setting("staff_can_delete", "true") != "false"})
+    return jsonify({"staff_can_delete": get_setting("staff_can_delete", "true") != "false",
+                    "staff_can_edit": get_setting("staff_can_edit", "true") != "false",
+                    "auto_reports": get_setting("auto_reports", "true") != "false"})
 
 
 @bp.put("/settings")
@@ -148,7 +150,20 @@ def put_settings():
                         "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", (val,))
             log_activity(cur, g.user_id, g.name, "updated", "team settings", None,
                          "staff can delete records: " + val)
-    return jsonify({"staff_can_delete": get_setting("staff_can_delete", "true") != "false"})
+        if "staff_can_edit" in data:
+            val = "true" if data["staff_can_edit"] else "false"
+            cur.execute("INSERT INTO settings (key, value) VALUES ('staff_can_edit', %s) "
+                        "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", (val,))
+            log_activity(cur, g.user_id, g.name, "updated", "team settings", None,
+                         "staff can edit records: " + val)
+        if "auto_reports" in data:
+            val = "true" if data["auto_reports"] else "false"
+            cur.execute("INSERT INTO settings (key, value) VALUES ('auto_reports', %s) "
+                        "ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value", (val,))
+            log_activity(cur, g.user_id, g.name, "updated", "team settings", None, "automatic reports: " + val)
+    return jsonify({"staff_can_delete": get_setting("staff_can_delete", "true") != "false",
+                    "staff_can_edit": get_setting("staff_can_edit", "true") != "false",
+                    "auto_reports": get_setting("auto_reports", "true") != "false"})
 
 
 @bp.get("/logins")

@@ -18,6 +18,8 @@ from routes_backup import bp as backup_bp
 from summary import bp as summary_bp, trigger_in_background
 from routes_backup import trigger_in_background as backup_trigger
 from routes_team import bp as team_bp
+from reports_auto import trigger_in_background as report_trigger
+from guards import bp as guards_bp, check_write
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
@@ -34,6 +36,8 @@ def create_app():
     app.register_blueprint(backup_bp)
     app.register_blueprint(summary_bp)
     app.register_blueprint(team_bp)
+    app.register_blueprint(guards_bp)
+    app.before_request(check_write)
 
     # --- CORS: only your own site(s) may call the API from a browser -------
     # The app is served from this same server, so normally no CORS is needed at all.
@@ -67,6 +71,7 @@ def create_app():
     @app.get("/api/health")
     def health():
         trigger_in_background()
+        report_trigger()
         backup_trigger()   # sends the end-of-day summary once per day (see summary.py)
         return jsonify({"status": "ok", "service": "kray-enterprise-backend"})
 
