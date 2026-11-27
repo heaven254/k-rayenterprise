@@ -887,7 +887,7 @@
     text-align:center;margin-top:10px;letter-spacing:4px;font-size:16px;color:#111827;
   }
   .receipt-modal-actions{
-    display:flex;gap:10px;padding:14px 18px;border-top:1px solid var(--line-soft);
+    display:flex;flex-wrap:wrap;gap:10px;padding:14px 18px;border-top:1px solid var(--line-soft);
   }
   .receipt-modal-actions .btn{flex:1;}
   @media print{
@@ -2929,6 +2929,11 @@
       <div class="receipt-paper" id="receipt-paper-content"></div>
     </div>
     <div class="receipt-modal-actions">
+      <div style="width:100%;display:flex;gap:8px;align-items:center;justify-content:center;font-size:12px;">
+        <button class="btn btn-secondary btn-small" onclick="receiptWidthAdjust(-6)">◀ Narrower</button>
+        <span id="receipt-w-note">Print width</span>
+        <button class="btn btn-secondary btn-small" onclick="receiptWidthAdjust(6)">Wider ▶</button>
+      </div>
       <button class="btn btn-secondary" onclick="downloadReceipt()">⬇ Download</button>
       <button class="btn btn-secondary" onclick="whatsappReceipt()">💬 WhatsApp</button>
       <button class="btn btn-secondary" onclick="shareReceipt()">📤 Share</button>
@@ -6582,6 +6587,7 @@
     currentReceiptData = data;
     document.getElementById('receipt-paper-content').innerHTML = buildReceiptPaperHTML(data);
     document.getElementById('receipt-modal-overlay').classList.remove('hidden');
+    const wn = document.getElementById('receipt-w-note'); if (wn) wn.textContent = 'Print width: ' + receiptWidthPct() + '%';
   }
 
   function closeReceiptModal() {
@@ -6589,6 +6595,12 @@
     currentReceiptData = null;
   }
 
+  function receiptWidthPct() { let v = 72; try { v = Number(localStorage.getItem('kray_receipt_w')) || 72; } catch (e) {} return Math.min(100, Math.max(40, v)); }
+  function receiptWidthAdjust(d) {
+    let v = receiptWidthPct() + d; v = Math.min(100, Math.max(40, v));
+    try { localStorage.setItem('kray_receipt_w', String(v)); } catch (e) {}
+    const el = document.getElementById('receipt-w-note'); if (el) el.textContent = 'Print width: ' + v + '%';
+  }
   function buildStandaloneReceiptHTML(data) {
     const paperHTML = buildReceiptPaperHTML(data);
     return `<!DOCTYPE html>
@@ -6626,7 +6638,7 @@
   *{box-sizing:border-box;}
   @page{margin:0;size:auto;}
   body{padding:0 !important;display:block !important;}
-  .receipt-paper{width:100% !important;max-width:300px;margin:0 auto;padding:6px 8px !important;box-shadow:none !important;border-radius:0 !important;font-size:12px !important;}
+  .receipt-paper{width:${receiptWidthPct()}% !important;max-width:300px;margin:0 auto;padding:6px 8px !important;box-shadow:none !important;border-radius:0 !important;font-size:12px !important;}
   .rp-business{font-size:15px !important;}
   .rp-tag{font-size:9px !important;}
   table{table-layout:fixed;width:100%;}
