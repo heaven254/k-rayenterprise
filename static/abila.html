@@ -6546,14 +6546,14 @@
       <tr>
         <td>${it.item}</td>
         <td class="num">${it.qty}</td>
-        <td class="num">${fmt(it.price)}</td>
-        <td class="num">${fmt(it.total)}</td>
+        <td class="num">${Number(it.price).toLocaleString()}</td>
+        <td class="num">${Number(it.total).toLocaleString()}</td>
       </tr>`).join('');
 
     return `
       ${logo ? `<img class="rp-logo" src="${logo}" alt="logo">` : ''}
       <div class="rp-business">${business}</div>
-      <div class="rp-tag">Official Sales Receipt</div>
+      <div class="rp-tag">Official Sales Receipt · amounts in KSh</div>
       <hr class="rp-divider">
       <div class="rp-meta-row"><span>Receipt No.</span><span>${receiptNumber(data.receiptId)}</span></div>
       <div class="rp-meta-row"><span>Date</span><span>${data.date}</span></div>
@@ -6561,9 +6561,10 @@
       ${(data.splitBreakdown && data.splitBreakdown.length) ? data.splitBreakdown.map(p => `<div class="rp-meta-row"><span>Paid via ${p.label}</span><span>${fmt(p.amount)}</span></div>`).join('') : `<div class="rp-meta-row"><span>Paid Via</span><span>${accountLabels[data.account || 'cash']}</span></div>`}
       <hr class="rp-divider">
       <table>
+        <colgroup><col style="width:38%"><col style="width:12%"><col style="width:23%"><col style="width:27%"></colgroup>
         <thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Total</th></tr></thead>
         <tbody>${rows}</tbody>
-        <tfoot><tr class="rp-total-row"><td colspan="3">TOTAL</td><td class="num">${fmt(total)}</td></tr></tfoot>
+        <tfoot><tr class="rp-total-row"><td colspan="2">TOTAL</td><td class="num" colspan="2" style="white-space:nowrap;">${fmt(total)}</td></tr></tfoot>
       </table>
       <hr class="rp-divider">
       <div class="rp-footer">
@@ -6622,7 +6623,21 @@
   td{border-bottom:1px dotted #000 !important;}
   .rp-total-row td{font-size:15px;font-weight:800 !important;}
   .rp-logo{filter:grayscale(1) contrast(1.6);}
-  @media print{ body{background:#fff;padding:0;} .receipt-paper{box-shadow:none;width:100%;max-width:100%;padding:4px 2px;} }
+  *{box-sizing:border-box;}
+  @page{margin:0;size:auto;}
+  body{padding:0 !important;display:block !important;}
+  .receipt-paper{width:100% !important;max-width:300px;margin:0 auto;padding:6px 8px !important;box-shadow:none !important;border-radius:0 !important;font-size:12px !important;}
+  .rp-business{font-size:15px !important;}
+  .rp-tag{font-size:9px !important;}
+  table{table-layout:fixed;width:100%;}
+  th{letter-spacing:0 !important;white-space:nowrap;font-size:10px !important;}
+  th,td{padding-left:1px;padding-right:1px;word-wrap:break-word;overflow-wrap:anywhere;font-size:11px !important;}
+  td:first-child{padding-right:3px;}
+  .rp-meta-row{gap:6px;font-size:11px !important;}
+  .rp-meta-row span:last-child{text-align:right;overflow-wrap:anywhere;min-width:0;}
+  .rp-total-row td{font-size:14px !important;}
+  .rp-footer{font-size:10px !important;}
+  @media print{ body{background:#fff;} }
 </style>
 </head>
 <body>
